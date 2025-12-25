@@ -1,0 +1,22 @@
+# Secrets
+.env
+.env.local
+
+# Data
+data/raw/*
+!data/raw/.keep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.venv*/
+.pytest_cache/
+.mypy_cache/
+
+# Node (if/when you add web)
+node_modules/
+dist/
+
+# OS
+.DS_Store
