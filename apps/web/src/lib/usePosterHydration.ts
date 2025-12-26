@@ -9,7 +9,7 @@ export function usePosterHydration(ids: number[] | undefined) {
   useEffect(() => {
     if (!ids || ids.length === 0) return;
     
-    const idsString = ids.sort().join(",");
+    const idsString = [...ids].sort((a, b) => a - b).join(",");
     if (idsString === lastProcessedIds.current) return;
     
     const missing = ids.filter(id => posterMap[id] === undefined);
