@@ -9,14 +9,21 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, subtitle, status, userId }: PageHeaderProps) {
   return (
-    <header className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-white/70 p-6 shadow-soft sm:flex-row sm:items-center sm:justify-between">
+    <header className="flex flex-col gap-6 rounded-2xl bg-white/50 p-6 shadow-soft sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">taste-kid</p>
-        <h1 className="text-3xl font-semibold text-foreground">{title}</h1>
-        {subtitle ? <p className="text-sm text-muted-foreground">{subtitle}</p> : null}
+        <p className="text-xs uppercase tracking-widest text-muted-foreground/80">taste-kid</p>
+        <h1 className="text-4xl font-medium text-foreground">{title}</h1>
+        {subtitle ? <p className="text-muted-foreground">{subtitle}</p> : null}
       </div>
-      <div className="flex items-center gap-3">
-        {status ? <Badge variant="secondary">API {status}</Badge> : null}
+      <div className="flex shrink-0 items-center gap-3">
+        {status ? (
+          <Badge
+            variant="secondary"
+            className="border-transparent bg-green-100 text-green-800"
+          >
+            API {status}
+          </Badge>
+        ) : null}
         {userId ? <Badge>User #{userId}</Badge> : null}
       </div>
     </header>

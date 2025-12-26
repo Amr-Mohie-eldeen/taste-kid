@@ -47,14 +47,14 @@ export function MovieCard({
   const content = (
     <CardContent
       className={cn(
-        "flex h-full gap-4 p-5",
-        layout === "row" ? "flex-col sm:flex-row" : "flex-col"
+        "flex flex-grow flex-col gap-4 p-5",
+        layout === "row" ? "sm:flex-row" : ""
       )}
     >
       <div
         className={cn(
           "w-full overflow-hidden rounded-lg bg-muted",
-          layout === "row" ? "aspect-[2/3] sm:w-40 sm:shrink-0" : "h-56",
+          layout === "row" ? "aspect-[2/3]" : "aspect-video",
           imageClassName
         )}
       >
@@ -70,7 +70,7 @@ export function MovieCard({
           </div>
         )}
       </div>
-      <div className="flex h-full flex-col space-y-3">
+      <div className="flex flex-grow flex-col space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h4 className="line-clamp-2 text-lg font-semibold text-foreground">

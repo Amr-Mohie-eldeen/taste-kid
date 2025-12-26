@@ -12,7 +12,7 @@ export function PosterImage({ src, alt, className }: PosterImageProps) {
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <div className="absolute inset-0 animate-pulse bg-gradient-to-br from-slate-200 via-slate-100 to-slate-200" />
+      <div className="absolute inset-0 animate-pulse bg-slate-200" />
       <img
         src={src}
         alt={alt}
