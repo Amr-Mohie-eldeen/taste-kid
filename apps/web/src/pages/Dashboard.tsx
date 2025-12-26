@@ -4,7 +4,6 @@ import {
   useUserSummary,
   useProfileStats,
   useFeed,
-  useRecommendations,
   useRatings,
   useRatingQueue,
   useNextMovie,
@@ -23,7 +22,7 @@ import { StatCard } from "../components/StatCard";
 import { formatDate } from "../lib/utils";
 import { Feed } from "./Dashboard/Feed";
 import { Rate } from "./Dashboard/Rate";
-import { Recommendations } from "./Dashboard/Recommendations";
+// Discovery tab removed
 import { Ratings } from "./Dashboard/Ratings";
 import { Search } from "./Dashboard/Search";
 import { 
@@ -31,7 +30,6 @@ import {
   LogIn, 
   LayoutDashboard, 
   Star, 
-  Compass, 
   History, 
   Search as SearchIcon,
   Zap
@@ -49,13 +47,10 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const [activeTab, setActiveTab] = useState("feed");
   
   // Pagination State
-  const [recommendationLimit, setRecommendationLimit] = useState(20);
   const [feedLimit, setFeedLimit] = useState(20);
   
-  // Sentinels + observers
-  const recommendationSentinelRef = useRef<HTMLDivElement | null>(null);
+  // Sentinel + observer for feed
   const feedSentinelRef = useRef<HTMLDivElement | null>(null);
-  const recsObserverRef = useRef<IntersectionObserver | null>(null);
   const feedObserverRef = useRef<IntersectionObserver | null>(null);
 
   // Search State
@@ -72,13 +67,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     isPlaceholderData: feedIsPlaceholder,
     isFetching: feedFetching,
   } = useFeed(userId, feedLimit);
-  
-  const { 
-    data: recommendations, 
-    isLoading: recsLoading, 
-    isPlaceholderData: recsIsPlaceholder,
-    isFetching: recsFetching,
-  } = useRecommendations(userId, recommendationLimit);
   
   const { data: ratings, isLoading: ratingsLoading } = useRatings(userId);
   const { data: ratingQueue, isLoading: queueLoading } = useRatingQueue(userId);
@@ -98,7 +86,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const allIds = useMemo(() => {
     const set = new Set<number>();
     feed?.forEach(m => set.add(m.id));
-    recommendations?.forEach(m => set.add(m.id));
     ratings?.forEach(m => set.add(m.id));
     ratingQueue?.forEach(m => set.add(m.id));
     if (nextMovie) set.add(nextMovie.id);
@@ -107,15 +94,9 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
       searchData.similar.forEach(m => set.add(m.id));
     }
     return Array.from(set);
-  }, [feed, recommendations, ratings, ratingQueue, nextMovie, searchData]);
+  }, [feed, ratings, ratingQueue, nextMovie, searchData]);
 
   usePosterHydration(allIds);
-
-  const hasMoreRecommendations = useMemo(() => {
-    if (!recommendations) return false;
-    if (recsIsPlaceholder) return true;
-    return recommendations.length >= recommendationLimit;
-  }, [recommendations, recsIsPlaceholder, recommendationLimit]);
 
   const hasMoreFeed = useMemo(() => {
     if (!feed) return false;
@@ -123,32 +104,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     return feed.length >= feedLimit;
   }, [feed, feedIsPlaceholder, feedLimit]);
 
-  const lastTriggeredRecLimit = useRef(20);
   const lastTriggeredFeedLimit = useRef(20);
-
-  // Setup observer for recommendations sentinel
-  const setupRecsObserver = useCallback(() => {
-    const node = recommendationSentinelRef.current;
-    if (!node) return;
-    if (recsObserverRef.current) recsObserverRef.current.disconnect();
-    const isRecs = activeTab === "recommendations";
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const [entry] = entries;
-        if (!entry.isIntersecting) return;
-        if (!isRecs) return;
-        if (!hasMoreRecommendations) return;
-        if (recsIsPlaceholder || recsFetching) return;
-        if (recommendationLimit !== lastTriggeredRecLimit.current) return;
-        const nextLimit = recommendationLimit + 20;
-        lastTriggeredRecLimit.current = nextLimit;
-        setRecommendationLimit(nextLimit);
-      },
-      { rootMargin: "50px", threshold: 0.01 }
-    );
-    recsObserverRef.current = observer;
-    observer.observe(node);
-  }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, recsFetching, recommendationLimit]);
 
   // Setup observer for feed sentinel
   const setupFeedObserver = useCallback(() => {
@@ -176,30 +132,13 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
 
   // Recreate observers when relevant state changes and sentinel exists
   useEffect(() => {
-    setupRecsObserver();
-    return () => {
-      if (recsObserverRef.current) recsObserverRef.current.disconnect();
-    };
-  }, [setupRecsObserver]);
-
-  useEffect(() => {
     setupFeedObserver();
     return () => {
       if (feedObserverRef.current) feedObserverRef.current.disconnect();
     };
   }, [setupFeedObserver]);
 
-  // Callback refs to capture sentinel nodes when they mount/unmount
-  const setRecommendationSentinel = useCallback((node: HTMLDivElement | null) => {
-    recommendationSentinelRef.current = node;
-    if (node) {
-      setupRecsObserver();
-    } else if (recsObserverRef.current) {
-      recsObserverRef.current.disconnect();
-      recsObserverRef.current = null;
-    }
-  }, [setupRecsObserver]);
-
+  // Callback ref to capture sentinel node when it mounts/unmounts
   const setFeedSentinel = useCallback((node: HTMLDivElement | null) => {
     feedSentinelRef.current = node;
     if (node) {
@@ -267,10 +206,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                   <Star className="h-4 w-4" />
                   Rate
                 </TabsTrigger>
-                <TabsTrigger value="recommendations" className="rounded-xl gap-2 px-5">
-                  <Compass className="h-4 w-4" />
-                  Discovery
-                </TabsTrigger>
+                {/* Discovery tab removed */}
                 <TabsTrigger value="ratings" className="rounded-xl gap-2 px-5">
                   <History className="h-4 w-4" />
                   History
@@ -304,17 +240,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               />
             </TabsContent>
 
-            <TabsContent value="recommendations" className="mt-0 focus-visible:ring-0">
-              <Recommendations
-                recommendations={recommendations || []}
-                posterMap={posterMap}
-                loading={recsLoading}
-                gridClass={gridClass}
-                isFetchingMore={recsIsPlaceholder}
-                hasMoreRecommendations={hasMoreRecommendations}
-                recommendationSentinel={setRecommendationSentinel}
-              />
-            </TabsContent>
+            {/* Discovery content removed */}
 
             <TabsContent value="ratings" className="mt-0 focus-visible:ring-0">
               <Ratings
