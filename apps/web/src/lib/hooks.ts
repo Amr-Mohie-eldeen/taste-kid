@@ -34,11 +34,12 @@ export function useCreateUser() {
 }
 
 // Feed & Recommendations Hooks
-export function useFeed(userId: number | null) {
+export function useFeed(userId: number | null, limit: number) {
   return useQuery({
-    queryKey: ["feed", userId],
-    queryFn: () => api.getFeed(userId!),
+    queryKey: ["feed", userId, limit],
+    queryFn: () => api.getFeed(userId!, limit),
     enabled: !!userId,
+    placeholderData: keepPreviousData,
   });
 }
 

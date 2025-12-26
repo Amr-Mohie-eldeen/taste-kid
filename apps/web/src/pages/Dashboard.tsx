@@ -47,18 +47,30 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const [displayName, setDisplayName] = useState("");
   const [existingUserId, setExistingUserId] = useState("");
   const [activeTab, setActiveTab] = useState("feed");
+  
+  // Pagination State
   const [recommendationLimit, setRecommendationLimit] = useState(20);
+  const [feedLimit, setFeedLimit] = useState(20);
+  
   const recommendationSentinel = useRef<HTMLDivElement | null>(null);
+  const feedSentinel = useRef<HTMLDivElement | null>(null);
 
   // Queries
   const { data: userSummary, error: summaryError } = useUserSummary(userId);
   const { data: profileStats } = useProfileStats(userId);
-  const { data: feed, isLoading: feedLoading } = useFeed(userId);
+  
+  const { 
+    data: feed, 
+    isLoading: feedLoading, 
+    isPlaceholderData: feedIsPlaceholder 
+  } = useFeed(userId, feedLimit);
+  
   const { 
     data: recommendations, 
     isLoading: recsLoading, 
-    isPlaceholderData 
+    isPlaceholderData: recsIsPlaceholder 
   } = useRecommendations(userId, recommendationLimit);
+  
   const { data: ratings, isLoading: ratingsLoading } = useRatings(userId);
   const { data: ratingQueue, isLoading: queueLoading } = useRatingQueue(userId);
   const { data: nextMovie, isLoading: nextLoading } = useNextMovie(userId);
@@ -70,44 +82,59 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const createUser = useCreateUser();
   const rateMovie = useRateMovie();
 
-  // Poster Hydration
-  usePosterHydration(feed?.map((item) => item.id));
-  usePosterHydration(recommendations?.map((item) => item.id));
-  usePosterHydration(ratings?.map((item) => item.id));
-  usePosterHydration(ratingQueue?.map((item) => item.id));
-  usePosterHydration(nextMovie ? [nextMovie.id] : undefined);
-  usePosterHydration(similarMovies?.map((item) => item.id));
+  // Consolidated Poster Hydration
+  const allIds = useMemo(() => {
+    const set = new Set<number>();
+    feed?.forEach(m => set.add(m.id));
+    recommendations?.forEach(m => set.add(m.id));
+    ratings?.forEach(m => set.add(m.id));
+    ratingQueue?.forEach(m => set.add(m.id));
+    if (nextMovie) set.add(nextMovie.id);
+    similarMovies?.forEach(m => set.add(m.id));
+    return Array.from(set);
+  }, [feed, recommendations, ratings, ratingQueue, nextMovie, similarMovies]);
+
+  usePosterHydration(allIds);
 
   const hasMoreRecommendations = useMemo(() => {
-    if (!recommendations) return true;
-    // If we're loading more, we assume there's more until the new data arrives
-    if (isPlaceholderData) return true;
+    if (!recommendations) return false;
+    if (recsIsPlaceholder) return true;
     return recommendations.length >= recommendationLimit;
-  }, [recommendations, isPlaceholderData, recommendationLimit]);
+  }, [recommendations, recsIsPlaceholder, recommendationLimit]);
 
-  // Infinite Scroll for Recommendations
+  const hasMoreFeed = useMemo(() => {
+    if (!feed) return false;
+    if (feedIsPlaceholder) return true;
+    return feed.length >= feedLimit;
+  }, [feed, feedIsPlaceholder, feedLimit]);
+
+  // Infinite Scroll Observer
   useEffect(() => {
-    if (activeTab !== "recommendations") {
-      setRecommendationLimit(20);
-      return;
-    }
+    const isRecs = activeTab === "recommendations";
+    const isFeed = activeTab === "feed";
+    
+    if (!isRecs && !isFeed) return;
 
-    const target = recommendationSentinel.current;
-    if (!target || !hasMoreRecommendations || isPlaceholderData) return;
+    const target = isRecs ? recommendationSentinel.current : feedSentinel.current;
+    if (!target) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (entry?.isIntersecting) {
-          setRecommendationLimit((prev) => prev + 20);
+        if (entry.isIntersecting) {
+          if (isRecs && hasMoreRecommendations && !recsIsPlaceholder) {
+            setRecommendationLimit(prev => prev + 20);
+          } else if (isFeed && hasMoreFeed && !feedIsPlaceholder) {
+            setFeedLimit(prev => prev + 20);
+          }
         }
       },
-      { rootMargin: "400px" }
+      { rootMargin: "800px" } 
     );
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [activeTab, hasMoreRecommendations, isPlaceholderData]);
+  }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, hasMoreFeed, feedIsPlaceholder]);
 
   // Custom Search State
   const [manualSearchLoading, setManualSearchLoading] = useState(false);
@@ -201,6 +228,9 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                 posterMap={posterMap}
                 loading={feedLoading}
                 gridClass={gridClass}
+                isFetchingMore={feedIsPlaceholder}
+                hasMore={hasMoreFeed}
+                sentinelRef={feedSentinel}
               />
             </TabsContent>
 
@@ -214,17 +244,18 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               />
             </TabsContent>
 
-                        <TabsContent value="recommendations" className="mt-0 focus-visible:ring-0">
-                          <Recommendations
-                            recommendations={recommendations || []}
-                            posterMap={posterMap}
-                            loading={recsLoading}
-                            gridClass={gridClass}
-                            isFetchingMore={isPlaceholderData}
-                            hasMoreRecommendations={hasMoreRecommendations}
-                            recommendationSentinel={recommendationSentinel}
-                          />
-                        </TabsContent>
+            <TabsContent value="recommendations" className="mt-0 focus-visible:ring-0">
+              <Recommendations
+                recommendations={recommendations || []}
+                posterMap={posterMap}
+                loading={recsLoading}
+                gridClass={gridClass}
+                isFetchingMore={recsIsPlaceholder}
+                hasMoreRecommendations={hasMoreRecommendations}
+                recommendationSentinel={recommendationSentinel}
+              />
+            </TabsContent>
+
             <TabsContent value="ratings" className="mt-0 focus-visible:ring-0">
               <Ratings
                 ratings={ratings || []}
@@ -250,7 +281,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
 
         {/* Sidebar */}
         <div className="space-y-6 order-1 lg:order-2">
-          {/* Session Management */}
           {!userId ? (
             <Card className="border-primary/20 bg-primary/[0.02] shadow-sm rounded-3xl overflow-hidden">
               <CardHeader className="pb-4">
