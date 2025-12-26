@@ -1,50 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { api } from "./lib/api";
 import { AppShell } from "./components/AppShell";
 import { Dashboard } from "./pages/Dashboard";
 import { MovieDetail } from "./pages/MovieDetail";
-
-const STORAGE_KEY = "tastekid:userId";
+import { useStore } from "./lib/store";
+import { queryClient } from "./lib/queryClient";
 
 export default function App() {
-  const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">(
-    "checking"
-  );
-  const [userId, setUserId] = useState<number | null>(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    return stored ? Number(stored) : null;
-  });
+  const { setApiStatus, setUserId, userId } = useStore();
 
   useEffect(() => {
     api
       .health()
       .then(() => setApiStatus("online"))
       .catch(() => setApiStatus("offline"));
-  }, []);
-
-  const handleSetUserId = (id: number | null) => {
-    setUserId(id);
-    if (id === null) {
-      localStorage.removeItem(STORAGE_KEY);
-    } else {
-      localStorage.setItem(STORAGE_KEY, id.toString());
-    }
-  };
+  }, [setApiStatus]);
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route element={<AppShell />}>
-          <Route
-            path="/"
-            element={
-              <Dashboard apiStatus={apiStatus} userId={userId} setUserId={handleSetUserId} />
-            }
-          />
-          <Route path="/movie/:movieId" element={<MovieDetail userId={userId} />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<AppShell />}>
+            <Route
+              path="/"
+              element={
+                <Dashboard userId={userId} setUserId={setUserId} />
+              }
+            />
+            <Route path="/movie/:movieId" element={<MovieDetail />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
   );
 }

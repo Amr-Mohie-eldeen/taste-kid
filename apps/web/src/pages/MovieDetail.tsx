@@ -1,10 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import {
-  api,
-  type MovieDetail as MovieDetailType,
-  type SimilarMovie,
-} from "../lib/api";
+import { useStore } from "../lib/store";
+import { useMovieDetail, useSimilarMovies, useRateMovie } from "../lib/hooks";
+import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
@@ -13,86 +11,30 @@ import { EmptyState } from "../components/EmptyState";
 import { MovieCard } from "../components/MovieCard";
 import { PosterImage } from "../components/PosterImage";
 import { SectionHeader } from "../components/SectionHeader";
+import { formatDate } from "../lib/utils";
 
-const formatDate = (value?: string | null) => {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString();
-};
-
-
-type MovieDetailProps = {
-  userId: number | null;
-};
-
-export function MovieDetail({ userId }: MovieDetailProps) {
+export function MovieDetail() {
   const { movieId } = useParams();
   const navigate = useNavigate();
-  const [detail, setDetail] = useState<MovieDetailType | null>(null);
-  const [similar, setSimilar] = useState<SimilarMovie[]>([]);
-  const [posterMap, setPosterMap] = useState<Record<number, string | null>>({});
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [ratingStatus, setRatingStatus] = useState<string | null>(null);
-
+  const { userId, posterMap } = useStore();
+  
   const id = Number(movieId);
 
-  useEffect(() => {
-    if (!Number.isFinite(id)) {
-      setError("Invalid movie id.");
-      setLoading(false);
-      return;
-    }
-    window.scrollTo({ top: 0, behavior: "smooth" });
-    setLoading(true);
-    setError(null);
-    setRatingStatus(null);
-    const load = async () => {
-      try {
-        const [detailResponse, similarResponse] = await Promise.all([
-          api.getMovieDetail(id),
-          api.getSimilar(id),
-        ]);
-        setDetail(detailResponse);
-        setSimilar(similarResponse);
-        await hydratePosters(similarResponse.map((item) => item.id));
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load movie");
-      } finally {
-        setLoading(false);
-      }
-    };
-    void load();
-  }, [id]);
+  // Queries
+  const { data: detail, isLoading: movieLoading, error: movieError } = useMovieDetail(id);
+  const { data: similar, isLoading: similarLoading } = useSimilarMovies(id);
+  
+  // Mutations
+  const rateMovie = useRateMovie();
 
-  const hydratePosters = async (ids: number[]) => {
-    const missing = ids.filter((movie) => !(movie in posterMap));
-    if (!missing.length) return;
-    const results = await Promise.all(
-      missing.map((movie) => api.getMovieDetail(movie).catch(() => null))
-    );
-    setPosterMap((prev) => {
-      const next = { ...prev };
-      results.forEach((movie, index) => {
-        const movieId = missing[index];
-        next[movieId] = movie?.poster_url ?? movie?.backdrop_url ?? null;
-      });
-      return next;
-    });
-  };
+  // Poster Hydration
+  usePosterHydration(similar?.map((item) => item.id));
 
   const handleRate = async (rating: number | null, status: string) => {
-    if (!userId || !detail) {
-      setRatingStatus("Select a profile first on the dashboard.");
+    if (!userId || !id) {
       return;
     }
-    try {
-      await api.rateMovie(userId, detail.id, rating, status);
-      setRatingStatus("Rating saved.");
-    } catch (err) {
-      setRatingStatus(err instanceof Error ? err.message : "Failed to rate movie");
-    }
+    rateMovie.mutate({ userId, movieId: id, rating, status });
   };
 
   const meta = useMemo(() => {
@@ -106,7 +48,7 @@ export function MovieDetail({ userId }: MovieDetailProps) {
     return list;
   }, [detail]);
 
-  if (loading) {
+  if (movieLoading) {
     return (
       <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
         <Skeleton className="aspect-[2/3] w-full rounded-2xl" />
@@ -120,16 +62,14 @@ export function MovieDetail({ userId }: MovieDetailProps) {
     );
   }
 
-  if (error) {
+  if (movieError || (!detail && !movieLoading)) {
     return (
       <div>
-        <EmptyState title="Unable to load" description={error} />
+        <EmptyState title="Unable to load" description={movieError instanceof Error ? movieError.message : "Movie not found"} />
         <Button className="mt-6" onClick={() => navigate("/")}>Back</Button>
       </div>
     );
   }
-
-  if (!detail) return null;
 
   return (
     <div className="space-y-10">
@@ -180,21 +120,35 @@ export function MovieDetail({ userId }: MovieDetailProps) {
                 size="sm"
                 variant="outline"
                 onClick={() => handleRate(rating, "watched")}
+                disabled={rateMovie.isPending}
               >
                 {rating}★
               </Button>
             ))}
-            <Button size="sm" variant="ghost" onClick={() => handleRate(null, "unwatched")}>
+            <Button 
+              size="sm" 
+              variant="ghost" 
+              onClick={() => handleRate(null, "unwatched")}
+              disabled={rateMovie.isPending}
+            >
               Mark as unwatched
             </Button>
           </div>
-          {ratingStatus ? <p className="text-sm text-primary">{ratingStatus}</p> : null}
+          {!userId && (
+            <p className="text-sm text-amber-600">Select a profile first on the dashboard to rate movies.</p>
+          )}
+          {rateMovie.isSuccess && <p className="text-sm text-primary">Rating saved.</p>}
+          {rateMovie.isError && <p className="text-sm text-destructive">Failed to save rating.</p>}
         </div>
       </div>
 
       <div className="space-y-4">
         <SectionHeader title="Similar picks" />
-        {similar.length ? (
+        {similarLoading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-48" />)}
+          </div>
+        ) : similar && similar.length ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {similar.map((item) => (
               <MovieCard

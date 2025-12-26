@@ -1,577 +1,357 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { useStore } from "../lib/store";
 import {
-  api,
-  type FeedItem,
-  type MovieDetail,
-  type NextMovie,
-  type ProfileStats,
-  type RatingQueueItem,
-  type RatedMovie,
-  type Recommendation,
-  type SimilarMovie,
-  type UserSummary,
-} from "../lib/api";
+  useUserSummary,
+  useProfileStats,
+  useFeed,
+  useRecommendations,
+  useRatings,
+  useRatingQueue,
+  useNextMovie,
+  useRateMovie,
+  useCreateUser,
+} from "../lib/hooks";
+import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs";
 import { Separator } from "../components/ui/separator";
-import { Skeleton } from "../components/ui/skeleton";
-import { EmptyState } from "../components/EmptyState";
-import { MovieCard } from "../components/MovieCard";
-import { PosterImage } from "../components/PosterImage";
 import { PageHeader } from "../components/PageHeader";
-import { SectionHeader } from "../components/SectionHeader";
 import { StatCard } from "../components/StatCard";
-
-const formatDate = (value?: string | null) => {
-  if (!value) return "-";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString();
-};
-
+import { formatDate } from "../lib/utils";
+import { Feed } from "./Dashboard/Feed";
+import { Rate } from "./Dashboard/Rate";
+import { Recommendations } from "./Dashboard/Recommendations";
+import { Ratings } from "./Dashboard/Ratings";
+import { Search } from "./Dashboard/Search";
+import { api } from "../lib/api";
+import { 
+  UserPlus, 
+  LogIn, 
+  LayoutDashboard, 
+  Star, 
+  Compass, 
+  History, 
+  Search as SearchIcon,
+  Zap
+} from "lucide-react";
 
 type DashboardProps = {
-  apiStatus: "checking" | "online" | "offline";
   userId: number | null;
   setUserId: (id: number | null) => void;
 };
 
-export function Dashboard({ apiStatus, userId, setUserId }: DashboardProps) {
+export function Dashboard({ userId, setUserId }: DashboardProps) {
+  const { posterMap } = useStore();
   const [displayName, setDisplayName] = useState("");
   const [existingUserId, setExistingUserId] = useState("");
-  const [userSummary, setUserSummary] = useState<UserSummary | null>(null);
-  const [profileStats, setProfileStats] = useState<ProfileStats | null>(null);
   const [activeTab, setActiveTab] = useState("feed");
-  const [sectionLoading, setSectionLoading] = useState(false);
-  const [sectionError, setSectionError] = useState<string | null>(null);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-
-  const [feed, setFeed] = useState<FeedItem[]>([]);
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
-  const [ratings, setRatings] = useState<RatedMovie[]>([]);
-  const [ratingQueue, setRatingQueue] = useState<RatingQueueItem[]>([]);
-  const [nextMovie, setNextMovie] = useState<NextMovie | null>(null);
-  const [watchedCount, setWatchedCount] = useState<number | null>(null);
   const [recommendationLimit, setRecommendationLimit] = useState(20);
-  const [hasMoreRecommendations, setHasMoreRecommendations] = useState(true);
-  const [isFetchingMore, setIsFetchingMore] = useState(false);
   const recommendationSentinel = useRef<HTMLDivElement | null>(null);
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [searchedMovie, setSearchedMovie] = useState<MovieDetail | null>(null);
-  const [similarMovies, setSimilarMovies] = useState<SimilarMovie[]>([]);
+  // Queries
+  const { data: userSummary, error: summaryError } = useUserSummary(userId);
+  const { data: profileStats } = useProfileStats(userId);
+  const { data: feed, isLoading: feedLoading } = useFeed(userId);
+  const { 
+    data: recommendations, 
+    isLoading: recsLoading, 
+    isPlaceholderData 
+  } = useRecommendations(userId, recommendationLimit);
+  const { data: ratings, isLoading: ratingsLoading } = useRatings(userId);
+  const { data: ratingQueue, isLoading: queueLoading } = useRatingQueue(userId);
+  const { data: nextMovie, isLoading: nextLoading } = useNextMovie(userId);
 
-  const [posterMap, setPosterMap] = useState<Record<number, string | null>>({});
+  const [searchedMovie, setSearchedMovie] = useState<any>(null);
+  const [similarMovies, setSimilarMovies] = useState<any[]>([]);
 
+  // Mutations
+  const createUser = useCreateUser();
+  const rateMovie = useRateMovie();
+
+  // Poster Hydration
+  usePosterHydration(feed?.map((item) => item.id));
+  usePosterHydration(recommendations?.map((item) => item.id));
+  usePosterHydration(ratings?.map((item) => item.id));
+  usePosterHydration(ratingQueue?.map((item) => item.id));
+  usePosterHydration(nextMovie ? [nextMovie.id] : undefined);
+  usePosterHydration(similarMovies?.map((item) => item.id));
+
+  // Infinite Scroll for Recommendations
   useEffect(() => {
-    if (!userId) return;
-    setSectionError(null);
-    api
-      .getUserSummary(userId)
-      .then((summary) => setUserSummary(summary))
-      .catch((error) => setSectionError(error.message));
-    api
-      .getProfileStats(userId)
-      .then((stats) => setProfileStats(stats))
-      .catch(() => null);
-    api
-      .getRatings(userId, 100)
-      .then((items) =>
-        setWatchedCount(items.filter((item) => item.status === "watched").length)
-      )
-      .catch(() => null);
-  }, [userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    const isRecommendationLoadMore =
-      activeTab === "recommendations" && recommendationLimit > 20 && recommendations.length > 0;
-    if (isRecommendationLoadMore) {
-      setIsFetchingMore(true);
-    } else {
-      setSectionLoading(true);
+    if (activeTab !== "recommendations") {
+      setRecommendationLimit(20);
+      return;
     }
-    setSectionError(null);
-    const load = async () => {
-      try {
-        if (activeTab === "feed") {
-          const data = await api.getFeed(userId);
-          setFeed(data);
-          await hydratePosters(data.map((item) => item.id));
-        }
-        if (activeTab === "recommendations") {
-          const data = await api.getRecommendations(userId, recommendationLimit);
-          setRecommendations(data);
-          setHasMoreRecommendations(data.length >= recommendationLimit);
-          await hydratePosters(data.map((item) => item.id));
-        }
-        if (activeTab === "ratings") {
-          const data = await api.getRatings(userId);
-          setRatings(data);
-          await hydratePosters(data.map((item) => item.id));
-        }
-        if (activeTab === "rate") {
-          const [queue, next] = await Promise.all([
-            api.getRatingQueue(userId),
-            api.getNextMovie(userId).catch(() => null),
-          ]);
-          setRatingQueue(queue);
-          setNextMovie(next);
-          const ids = queue.map((item) => item.id);
-          if (next) ids.push(next.id);
-          await hydratePosters(ids);
-        }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unable to load data";
-        setSectionError(message);
-      } finally {
-        setSectionLoading(false);
-        setIsFetchingMore(false);
-      }
-    };
-    void load();
-  }, [activeTab, recommendationLimit, userId]);
 
-  useEffect(() => {
-    if (activeTab !== "recommendations") return;
-    setRecommendationLimit(20);
-    setHasMoreRecommendations(true);
-    setIsFetchingMore(false);
-  }, [activeTab]);
-
-  useEffect(() => {
-    if (activeTab !== "recommendations") return;
     const target = recommendationSentinel.current;
     if (!target) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (!entry?.isIntersecting) return;
-        if (!hasMoreRecommendations || sectionLoading || isFetchingMore) return;
-        setIsFetchingMore(true);
-        setRecommendationLimit((prev) => prev + 20);
+        if (
+          entry?.isIntersecting && 
+          recommendations && 
+          recommendations.length >= recommendationLimit &&
+          !isPlaceholderData
+        ) {
+          setRecommendationLimit((prev) => prev + 20);
+        }
       },
       { rootMargin: "200px" }
     );
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [activeTab, hasMoreRecommendations, isFetchingMore, sectionLoading]);
+  }, [activeTab, recommendations, recommendationLimit, isPlaceholderData]);
 
-  useEffect(() => {
-    if (!sectionLoading && activeTab === "recommendations") {
-      setIsFetchingMore(false);
-    }
-  }, [activeTab, sectionLoading]);
+  // Custom Search State
+  const [manualSearchLoading, setManualSearchLoading] = useState(false);
+  const [manualSearchError, setManualSearchError] = useState<string | null>(null);
 
-  const hydratePosters = async (ids: number[]) => {
-    const missing = ids.filter((id) => !(id in posterMap));
-    if (!missing.length) return;
-    const results = await Promise.all(
-      missing.map((id) => api.getMovieDetail(id).catch(() => null))
-    );
-    setPosterMap((prev) => {
-      const next = { ...prev };
-      results.forEach((detail, index) => {
-        const id = missing[index];
-        next[id] = detail?.poster_url ?? detail?.backdrop_url ?? null;
-      });
-      return next;
-    });
-  };
-
-  const handleSetUserId = (id: number) => {
-    setUserId(id);
-    localStorage.setItem("tastekid:userId", id.toString());
-  };
-
-  const handleCreateUser = async () => {
-    setSectionError(null);
-    setStatusMessage(null);
-    try {
-      const summary = await api.createUser(displayName.trim() || null);
-      setUserSummary(summary);
-      handleSetUserId(summary.id);
-      setStatusMessage("Profile created. Start rating to personalize your feed.");
-    } catch (error) {
-      setSectionError(error instanceof Error ? error.message : "Failed to create user");
-    }
-  };
-
-  const handleUseExisting = () => {
-    const id = Number(existingUserId);
-    if (!Number.isFinite(id) || id <= 0) {
-      setSectionError("Enter a valid user id.");
-      return;
-    }
-    setSectionError(null);
-    setStatusMessage(null);
-    handleSetUserId(id);
-  };
-
-  const handleRateMovie = async (movieId: number, rating: number | null, status: string) => {
-    if (!userId) return;
-    setSectionLoading(true);
-    setSectionError(null);
-    try {
-      await api.rateMovie(userId, movieId, rating, status);
-      const [queue, next, stats, summary] = await Promise.all([
-        api.getRatingQueue(userId),
-        api.getNextMovie(userId).catch(() => null),
-        api.getProfileStats(userId),
-        api.getUserSummary(userId),
-      ]);
-      setRatingQueue(queue);
-      setNextMovie(next);
-      setProfileStats(stats);
-      setUserSummary(summary);
-      const ids = queue.map((item) => item.id);
-      if (next) ids.push(next.id);
-      await hydratePosters(ids);
-      api
-        .getRatings(userId, 100)
-        .then((items) =>
-          setWatchedCount(items.filter((item) => item.status === "watched").length)
-        )
-        .catch(() => null);
-      setStatusMessage("Rating saved.");
-    } catch (error) {
-      setSectionError(error instanceof Error ? error.message : "Failed to update rating");
-    } finally {
-      setSectionLoading(false);
-    }
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setSearchLoading(true);
-    setSearchError(null);
+  const performSearch = async (query: string) => {
+    if (!query.trim()) return;
+    setManualSearchLoading(true);
+    setManualSearchError(null);
     setSearchedMovie(null);
     setSimilarMovies([]);
+    
     try {
-      const lookup = await api.lookupMovie(searchQuery.trim());
+      const lookup = await api.lookupMovie(query);
       const [detail, similar] = await Promise.all([
         api.getMovieDetail(lookup.id),
         api.getSimilar(lookup.id),
       ]);
       setSearchedMovie(detail);
       setSimilarMovies(similar);
-      await hydratePosters(similar.map((item) => item.id));
     } catch (error) {
-      setSearchError(error instanceof Error ? error.message : "Search failed");
+      setManualSearchError(error instanceof Error ? error.message : "Search failed");
     } finally {
-      setSearchLoading(false);
+      setManualSearchLoading(false);
     }
   };
 
-  const nextPoster = nextMovie ? posterMap[nextMovie.id] : null;
-  const watchedRatings = useMemo(
-    () => ratings.filter((item) => item.status === "watched"),
-    [ratings]
-  );
-  const ratingsCount = watchedCount ?? userSummary?.num_ratings ?? 0;
+  const handleCreateUser = () => {
+    createUser.mutate(displayName.trim() || null);
+  };
 
+  const handleUseExisting = () => {
+    const id = Number(existingUserId);
+    if (!Number.isFinite(id) || id <= 0) return;
+    setUserId(id);
+    localStorage.setItem("tastekid:userId", id.toString());
+  };
+
+  const handleRateMovie = (movieId: number, rating: number | null, status: string) => {
+    if (!userId) return;
+    rateMovie.mutate({ userId, movieId, rating, status });
+  };
+
+  const ratingsCount = ratings?.filter((r) => r.status === "watched").length ?? userSummary?.num_ratings ?? 0;
+  
   const gridClass = useMemo(
-    () => "grid auto-rows-fr gap-4 sm:grid-cols-2 lg:grid-cols-3",
+    () => "grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3",
     []
   );
 
   return (
-    <div className="space-y-10">
+    <div className="space-y-8 max-w-[1400px] mx-auto">
       <PageHeader
-        title="Taste.io Studio"
-        subtitle=""
-        status={apiStatus}
+        title="Intelligence Studio"
+        subtitle="Harnessing vector similarity to map your cinematic taste profile."
         userId={userId}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <Card className="shadow-glow">
-          <CardHeader>
-            <CardTitle>Get started</CardTitle>
-            <CardDescription>Create or load a profile.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-              <Input
-                placeholder="Display name (optional)"
-                value={displayName}
-                onChange={(event) => setDisplayName(event.target.value)}
-              />
-              <Button onClick={handleCreateUser}>Create profile</Button>
+      <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+        {/* Main Content */}
+        <div className="space-y-8 order-2 lg:order-1">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <div className="flex items-center justify-between mb-6 overflow-x-auto pb-2 scrollbar-hide">
+              <TabsList className="bg-secondary/50 p-1 rounded-2xl border border-border/50">
+                <TabsTrigger value="feed" className="rounded-xl gap-2 px-5">
+                  <LayoutDashboard className="h-4 w-4" />
+                  Feed
+                </TabsTrigger>
+                <TabsTrigger value="rate" className="rounded-xl gap-2 px-5">
+                  <Star className="h-4 w-4" />
+                  Rate
+                </TabsTrigger>
+                <TabsTrigger value="recommendations" className="rounded-xl gap-2 px-5">
+                  <Compass className="h-4 w-4" />
+                  Discovery
+                </TabsTrigger>
+                <TabsTrigger value="ratings" className="rounded-xl gap-2 px-5">
+                  <History className="h-4 w-4" />
+                  History
+                </TabsTrigger>
+                <TabsTrigger value="search" className="rounded-xl gap-2 px-5">
+                  <SearchIcon className="h-4 w-4" />
+                  Search
+                </TabsTrigger>
+              </TabsList>
             </div>
-            <Separator />
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-              <Input
-                placeholder="Existing user id"
-                value={existingUserId}
-                onChange={(event) => setExistingUserId(event.target.value)}
-              />
-              <Button variant="outline" onClick={handleUseExisting}>
-                Load profile
-              </Button>
-            </div>
-            {statusMessage ? (
-              <p className="text-sm text-primary">{statusMessage}</p>
-            ) : null}
-            {sectionError ? (
-              <p className="text-sm text-destructive">{sectionError}</p>
-            ) : null}
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Profile snapshot</CardTitle>
-            <CardDescription>Monitor how your taste vector evolves.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
-            <StatCard label="Ratings" value={ratingsCount} />
-            <StatCard label="Likes" value={profileStats?.num_liked ?? 0} />
-            <StatCard label="Embedding" value={profileStats?.embedding_norm?.toFixed(2)} />
-            <StatCard
-              label="Updated"
-              value={profileStats?.updated_at ? formatDate(profileStats.updated_at) : "-"}
-            />
-          </CardContent>
-        </Card>
+            <TabsContent value="feed" className="mt-0 focus-visible:ring-0">
+              <Feed
+                feed={feed || []}
+                posterMap={posterMap}
+                loading={feedLoading}
+                gridClass={gridClass}
+              />
+            </TabsContent>
+
+            <TabsContent value="rate" className="mt-0 focus-visible:ring-0">
+              <Rate
+                nextMovie={nextMovie}
+                ratingQueue={ratingQueue || []}
+                posterMap={posterMap}
+                loading={queueLoading || nextLoading}
+                onRateMovie={handleRateMovie}
+              />
+            </TabsContent>
+
+            <TabsContent value="recommendations" className="mt-0 focus-visible:ring-0">
+              <Recommendations
+                recommendations={recommendations || []}
+                posterMap={posterMap}
+                loading={recsLoading}
+                gridClass={gridClass}
+                isFetchingMore={isPlaceholderData}
+                hasMoreRecommendations={!!recommendations && recommendations.length >= recommendationLimit}
+                recommendationSentinel={recommendationSentinel}
+              />
+            </TabsContent>
+
+            <TabsContent value="ratings" className="mt-0 focus-visible:ring-0">
+              <Ratings
+                ratings={ratings || []}
+                posterMap={posterMap}
+                loading={ratingsLoading}
+                gridClass={gridClass}
+              />
+            </TabsContent>
+
+            <TabsContent value="search" className="mt-0 focus-visible:ring-0">
+              <Search
+                onSearch={performSearch}
+                searchLoading={manualSearchLoading}
+                searchError={manualSearchError}
+                searchedMovie={searchedMovie}
+                similarMovies={similarMovies}
+                posterMap={posterMap}
+                gridClass={gridClass}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
-      <div>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="flex flex-wrap justify-start gap-2">
-            <TabsTrigger value="feed">Feed</TabsTrigger>
-            <TabsTrigger value="rate">Rate</TabsTrigger>
-            <TabsTrigger value="recommendations">Recommendations</TabsTrigger>
-            <TabsTrigger value="ratings">Ratings</TabsTrigger>
-            <TabsTrigger value="search">Search</TabsTrigger>
-          </TabsList>
-
-            <TabsContent value="feed">
-              <div className="space-y-4">
-                <SectionHeader title="For You" />
-                {sectionLoading ? (
-                  <Skeleton className="h-32" />
-                ) : feed.length ? (
-                  <div className={gridClass}>
-                    {feed.map((item) => (
-                      <MovieCard
-                        key={item.id}
-                        title={item.title}
-                        releaseDateLabel={item.release_date ? formatDate(item.release_date) : null}
-                        genres={item.genres}
-                        imageUrl={posterMap[item.id]}
-                        to={`/movie/${item.id}`}
-                        similarity={item.similarity}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState
-                    title="No feed yet"
-                  />
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="rate">
-              <div className="space-y-6">
-                <SectionHeader title="Rate the next pick" />
-                <div className="min-h-[320px]">
-                  {sectionLoading ? (
-                    <Skeleton className="h-64" />
-                  ) : nextMovie ? (
-                    <div key={nextMovie.id} className="swap-fade">
-                      <MovieCard
-                        title={nextMovie.title}
-                        releaseDateLabel={nextMovie.release_date ? formatDate(nextMovie.release_date) : null}
-                        genres={nextMovie.genres}
-                        imageUrl={nextPoster}
-                        layout="row"
-                        imageClassName="sm:w-28"
-                        actions={
-                          <div className="flex flex-wrap gap-2">
-                            {[5, 4, 3, 2, 1].map((rating) => (
-                              <Button
-                                key={rating}
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleRateMovie(nextMovie.id, rating, "watched")}
-                              >
-                                {rating}★
-                              </Button>
-                            ))}
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleRateMovie(nextMovie.id, null, "unwatched")}
-                            >
-                              Skip
-                            </Button>
-                            <Button size="sm" variant="ghost" asChild>
-                              <Link to={`/movie/${nextMovie.id}`}>Details</Link>
-                            </Button>
-                          </div>
-                        }
-                      />
-                    </div>
-                  ) : (
-                    <EmptyState title="You're all caught up" />
-                  )}
+        {/* Sidebar */}
+        <div className="space-y-6 order-1 lg:order-2">
+          {/* Session Management */}
+          {!userId ? (
+            <Card className="border-primary/20 bg-primary/[0.02] shadow-sm rounded-3xl overflow-hidden">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-2 text-primary mb-1">
+                  <Zap className="h-4 w-4 fill-primary" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Quick Start</span>
                 </div>
-
-                <Separator />
-                <SectionHeader title="Up next" />
-                {sectionLoading ? (
-                  <Skeleton className="h-20" />
-                ) : ratingQueue.length ? (
-                  <Card>
-                    <CardContent className="flex items-center justify-between gap-4 p-5">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          {ratingQueue.length} titles in your queue
-                        </p>
-                      </div>
-                      <div className="relative flex h-14 w-28 items-center">
-                        {ratingQueue.slice(0, 3).map((item, index) => (
-                          <div
-                            key={item.id}
-                            className="absolute h-14 w-10 overflow-hidden rounded-md border border-border bg-muted shadow-sm"
-                            style={{ left: `${index * 18}px`, zIndex: 10 - index }}
-                          >
-                            {posterMap[item.id] ? (
-                              <PosterImage
-                                src={posterMap[item.id] ?? ""}
-                                alt={item.title ?? "Movie"}
-                              />
-                            ) : null}
-                          </div>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ) : (
-                  <EmptyState title="Queue empty" />
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="recommendations">
-              <div className="space-y-4">
-                <SectionHeader title="Recommendations" />
-                {sectionLoading && !recommendations.length ? (
-                  <Skeleton className="h-32" />
-                ) : recommendations.length ? (
-                  <div className="space-y-4">
-                    <div className={gridClass}>
-                      {recommendations.map((item) => (
-                        <MovieCard
-                          key={item.id}
-                          title={item.title}
-                          releaseDateLabel={item.release_date ? formatDate(item.release_date) : null}
-                          genres={item.genres}
-                          imageUrl={posterMap[item.id]}
-                          to={`/movie/${item.id}`}
-                          similarity={item.similarity}
-                        />
-                      ))}
-                    </div>
-                    {isFetchingMore ? <Skeleton className="h-12" /> : null}
-                    {hasMoreRecommendations ? (
-                      <div ref={recommendationSentinel} className="h-10" />
-                    ) : null}
-                  </div>
-                ) : (
-                  <EmptyState title="No recommendations yet" />
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="ratings">
-              <div className="space-y-4">
-                <SectionHeader title="Your ratings" />
-                {sectionLoading ? (
-                  <Skeleton className="h-32" />
-                ) : watchedRatings.length ? (
-                  <div className={gridClass}>
-                    {watchedRatings.map((item) => (
-                      <MovieCard
-                        key={item.id}
-                        title={item.title}
-                        subtitle={item.updated_at ? `Updated ${formatDate(item.updated_at)}` : null}
-                        meta={[`Rating: ${item.rating ?? "-"}`]}
-                        imageUrl={posterMap[item.id]}
-                        to={`/movie/${item.id}`}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState title="No ratings yet" />
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="search">
-              <div className="space-y-6">
-                <SectionHeader title="Search movies" />
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <CardTitle className="text-xl">Initialize Profile</CardTitle>
+                <CardDescription className="text-xs">Create a new identity or load an existing one.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
                   <Input
-                    value={searchQuery}
-                    placeholder="Search by movie title"
-                    onChange={(event) => setSearchQuery(event.target.value)}
+                    placeholder="Identity Name"
+                    value={displayName}
+                    onChange={(event) => setDisplayName(event.target.value)}
+                    className="h-10 rounded-xl bg-background border-border/60"
                   />
-                  <Button disabled={!searchQuery.trim() || searchLoading} onClick={handleSearch}>
-                    {searchLoading ? "Searching..." : "Search"}
+                  <Button 
+                    onClick={handleCreateUser} 
+                    disabled={createUser.isPending}
+                    className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
+                  >
+                    <UserPlus className="h-4 w-4" />
+                    Generate Identity
                   </Button>
                 </div>
-                {searchError ? <p className="text-sm text-destructive">{searchError}</p> : null}
-
-                {searchLoading ? (
-                  <Skeleton className="h-48" />
-                ) : searchedMovie ? (
-                  <MovieCard
-                    title={searchedMovie.title}
-                    subtitle={searchedMovie.tagline}
-                    releaseDateLabel={
-                      searchedMovie.release_date ? formatDate(searchedMovie.release_date) : null
-                    }
-                    genres={searchedMovie.genres}
-                    description={searchedMovie.overview}
-                    imageUrl={searchedMovie.poster_url || searchedMovie.backdrop_url}
-                    to={`/movie/${searchedMovie.id}`}
-                  />
-                ) : null}
-
-                <Separator />
-                <SectionHeader title="Similar movies" />
-                {searchLoading ? (
-                  <Skeleton className="h-24" />
-                ) : similarMovies.length ? (
-                  <div className={gridClass}>
-                    {similarMovies.map((item) => (
-                      <MovieCard
-                        key={item.id}
-                        title={item.title}
-                        releaseDateLabel={item.release_date ? formatDate(item.release_date) : null}
-                        genres={item.genres}
-                        imageUrl={posterMap[item.id]}
-                        to={`/movie/${item.id}`}
-                        similarity={item.score}
-                      />
-                    ))}
+                <div className="relative py-2">
+                  <div className="absolute inset-0 flex items-center">
+                    <Separator />
                   </div>
-                ) : (
-                  <EmptyState title="No similar movies" />
+                  <div className="relative flex justify-center text-[10px] uppercase font-bold">
+                    <span className="bg-background px-2 text-muted-foreground">OR</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Input
+                    placeholder="Existing ID"
+                    value={existingUserId}
+                    onChange={(event) => setExistingUserId(event.target.value)}
+                    className="h-10 rounded-xl bg-background border-border/60"
+                  />
+                  <Button 
+                    variant="secondary" 
+                    onClick={handleUseExisting}
+                    className="w-full h-10 rounded-xl gap-2 font-bold"
+                  >
+                    <LogIn className="h-4 w-4" />
+                    Resume Session
+                  </Button>
+                </div>
+                {summaryError && (
+                  <p className="text-[11px] font-medium text-destructive bg-destructive/5 p-2 rounded-lg border border-destructive/10 text-center">
+                    Authentication failed. Check your ID.
+                  </p>
                 )}
-              </div>
-            </TabsContent>
-        </Tabs>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="border-border/40 shadow-sm rounded-3xl overflow-hidden">
+              <CardHeader className="pb-4">
+                <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                  <Zap className="h-4 w-4" />
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Profile Status</span>
+                </div>
+                <CardTitle className="text-xl">Taste Metrics</CardTitle>
+                <CardDescription className="text-xs">Real-time profile vector analysis.</CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                <StatCard 
+                  label="Computed Ratings" 
+                  value={ratingsCount} 
+                  className="rounded-2xl"
+                />
+                <StatCard 
+                  label="Liked Patterns" 
+                  value={profileStats?.num_liked ?? 0} 
+                  className="rounded-2xl"
+                />
+                <StatCard 
+                  label="Vector Norm" 
+                  value={profileStats?.embedding_norm?.toFixed(3)} 
+                  hint="Confidence"
+                  className="rounded-2xl"
+                />
+                <div className="mt-2 text-center">
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Last Synced: {profileStats?.updated_at ? formatDate(profileStats.updated_at) : "Never"}
+                  </p>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setUserId(null)}
+                    className="mt-4 text-[10px] h-7 font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
+                  >
+                    Terminate Session
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       </div>
     </div>
   );
