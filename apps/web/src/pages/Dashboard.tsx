@@ -129,7 +129,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
           }
         }
       },
-      { rootMargin: "800px" } 
+      { rootMargin: "200px" } 
     );
 
     observer.observe(target);
