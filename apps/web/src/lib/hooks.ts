@@ -27,7 +27,6 @@ export function useCreateUser() {
     mutationFn: (name: string | null) => api.createUser(name),
     onSuccess: (data) => {
       setUserId(data.id);
-      localStorage.setItem("tastekid:userId", data.id.toString());
       queryClient.invalidateQueries({ queryKey: ["userSummary", data.id] });
     },
   });
