@@ -28,10 +28,10 @@ CREATE TABLE IF NOT EXISTS movies (
 );
 
 -- NOTE: embedding dimension must match your embedding model output.
--- Default is 1024 to fit Titan v2. If you use a different model, change it here.
+-- Update this if you change the embedding model dimension.
 CREATE TABLE IF NOT EXISTS movie_embeddings (
   movie_id BIGINT PRIMARY KEY REFERENCES movies(id) ON DELETE CASCADE,
-  embedding vector(1024) NOT NULL,
+  embedding vector(768) NOT NULL,
   embedding_model TEXT NOT NULL,
   doc_hash TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -40,3 +40,57 @@ CREATE TABLE IF NOT EXISTS movie_embeddings (
 CREATE INDEX IF NOT EXISTS idx_movies_language ON movies(original_language);
 CREATE INDEX IF NOT EXISTS idx_movies_adult ON movies(adult);
 CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies(release_date);
+
+CREATE TABLE IF NOT EXISTS users (
+  id BIGSERIAL PRIMARY KEY,
+  display_name TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS user_movie_ratings (
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  movie_id BIGINT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,
+  rating INT,
+  status TEXT NOT NULL DEFAULT 'watched',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, movie_id),
+  CHECK (rating BETWEEN 0 AND 5 OR rating IS NULL)
+);
+
+CREATE INDEX IF NOT EXISTS idx_user_movie_ratings_user ON user_movie_ratings(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_movie_ratings_movie ON user_movie_ratings(movie_id);
+
+-- NOTE: update vector dimension if embedding model changes.
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  embedding vector(768) NOT NULL,
+  embedding_model TEXT,
+  num_ratings INT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Align user_profiles.embedding dimension with movie_embeddings.embedding
+DO $$
+DECLARE
+  dims INT;
+BEGIN
+  SELECT vector_dims(embedding) INTO dims
+  FROM movie_embeddings
+  LIMIT 1;
+
+  IF dims IS NULL THEN
+    SELECT a.atttypmod - 4 INTO dims
+    FROM pg_attribute a
+    JOIN pg_class c ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE c.relname = 'movie_embeddings'
+      AND a.attname = 'embedding'
+      AND n.nspname = 'public';
+  END IF;
+
+  IF dims IS NOT NULL THEN
+    EXECUTE 'TRUNCATE TABLE user_profiles';
+    EXECUTE format('ALTER TABLE user_profiles ALTER COLUMN embedding TYPE vector(%s)', dims);
+  END IF;
+END $$;
