@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useStore } from "../lib/store";
 import {
   useUserSummary,
@@ -52,8 +52,11 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const [recommendationLimit, setRecommendationLimit] = useState(20);
   const [feedLimit, setFeedLimit] = useState(20);
   
-  const recommendationSentinel = useRef<HTMLDivElement | null>(null);
-  const feedSentinel = useRef<HTMLDivElement | null>(null);
+  // Sentinels + observers
+  const recommendationSentinelRef = useRef<HTMLDivElement | null>(null);
+  const feedSentinelRef = useRef<HTMLDivElement | null>(null);
+  const recsObserverRef = useRef<IntersectionObserver | null>(null);
+  const feedObserverRef = useRef<IntersectionObserver | null>(null);
 
   // Search State
   const [searchQuery, setSearchQuery] = useState("");
@@ -66,13 +69,15 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const { 
     data: feed, 
     isLoading: feedLoading, 
-    isPlaceholderData: feedIsPlaceholder 
+    isPlaceholderData: feedIsPlaceholder,
+    isFetching: feedFetching,
   } = useFeed(userId, feedLimit);
   
   const { 
     data: recommendations, 
     isLoading: recsLoading, 
-    isPlaceholderData: recsIsPlaceholder 
+    isPlaceholderData: recsIsPlaceholder,
+    isFetching: recsFetching,
   } = useRecommendations(userId, recommendationLimit);
   
   const { data: ratings, isLoading: ratingsLoading } = useRatings(userId);
@@ -121,40 +126,89 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const lastTriggeredRecLimit = useRef(20);
   const lastTriggeredFeedLimit = useRef(20);
 
-  // Infinite Scroll Observer
-  useEffect(() => {
+  // Setup observer for recommendations sentinel
+  const setupRecsObserver = useCallback(() => {
+    const node = recommendationSentinelRef.current;
+    if (!node) return;
+    if (recsObserverRef.current) recsObserverRef.current.disconnect();
     const isRecs = activeTab === "recommendations";
-    const isFeed = activeTab === "feed";
-    
-    if (!isRecs && !isFeed) return;
-
-    const target = isRecs ? recommendationSentinel.current : feedSentinel.current;
-    if (!target) return;
-
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (entry.isIntersecting) {
-          if (isRecs && hasMoreRecommendations && !recsIsPlaceholder && recommendationLimit === lastTriggeredRecLimit.current) {
-            const nextLimit = recommendationLimit + 20;
-            lastTriggeredRecLimit.current = nextLimit;
-            setRecommendationLimit(nextLimit);
-          } else if (isFeed && hasMoreFeed && !feedIsPlaceholder && feedLimit === lastTriggeredFeedLimit.current) {
-            const nextLimit = feedLimit + 20;
-            lastTriggeredFeedLimit.current = nextLimit;
-            setFeedLimit(nextLimit);
-          }
-        }
+        if (!entry.isIntersecting) return;
+        if (!isRecs) return;
+        if (!hasMoreRecommendations) return;
+        if (recsIsPlaceholder || recsFetching) return;
+        if (recommendationLimit !== lastTriggeredRecLimit.current) return;
+        const nextLimit = recommendationLimit + 20;
+        lastTriggeredRecLimit.current = nextLimit;
+        setRecommendationLimit(nextLimit);
       },
-      { 
-        rootMargin: "50px",
-        threshold: 0.01 
-      } 
+      { rootMargin: "50px", threshold: 0.01 }
     );
+    recsObserverRef.current = observer;
+    observer.observe(node);
+  }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, recsFetching, recommendationLimit]);
 
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, hasMoreFeed, feedIsPlaceholder, recommendationLimit, feedLimit]);
+  // Setup observer for feed sentinel
+  const setupFeedObserver = useCallback(() => {
+    const node = feedSentinelRef.current;
+    if (!node) return;
+    if (feedObserverRef.current) feedObserverRef.current.disconnect();
+    const isFeed = activeTab === "feed";
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (!entry.isIntersecting) return;
+        if (!isFeed) return;
+        if (!hasMoreFeed) return;
+        if (feedIsPlaceholder || feedFetching) return;
+        if (feedLimit !== lastTriggeredFeedLimit.current) return;
+        const nextLimit = feedLimit + 20;
+        lastTriggeredFeedLimit.current = nextLimit;
+        setFeedLimit(nextLimit);
+      },
+      { rootMargin: "50px", threshold: 0.01 }
+    );
+    feedObserverRef.current = observer;
+    observer.observe(node);
+  }, [activeTab, hasMoreFeed, feedIsPlaceholder, feedFetching, feedLimit]);
+
+  // Recreate observers when relevant state changes and sentinel exists
+  useEffect(() => {
+    setupRecsObserver();
+    return () => {
+      if (recsObserverRef.current) recsObserverRef.current.disconnect();
+    };
+  }, [setupRecsObserver]);
+
+  useEffect(() => {
+    setupFeedObserver();
+    return () => {
+      if (feedObserverRef.current) feedObserverRef.current.disconnect();
+    };
+  }, [setupFeedObserver]);
+
+  // Callback refs to capture sentinel nodes when they mount/unmount
+  const setRecommendationSentinel = useCallback((node: HTMLDivElement | null) => {
+    recommendationSentinelRef.current = node;
+    if (node) {
+      setupRecsObserver();
+    } else if (recsObserverRef.current) {
+      recsObserverRef.current.disconnect();
+      recsObserverRef.current = null;
+    }
+  }, [setupRecsObserver]);
+
+  const setFeedSentinel = useCallback((node: HTMLDivElement | null) => {
+    feedSentinelRef.current = node;
+    if (node) {
+      setupFeedObserver();
+    } else if (feedObserverRef.current) {
+      feedObserverRef.current.disconnect();
+      feedObserverRef.current = null;
+    }
+  }, [setupFeedObserver]);
 
   // When tab is not 'search', disable search query
   useEffect(() => {
@@ -236,7 +290,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                 gridClass={gridClass}
                 isFetchingMore={feedIsPlaceholder}
                 hasMore={hasMoreFeed}
-                sentinelRef={feedSentinel}
+                sentinelRef={setFeedSentinel}
               />
             </TabsContent>
 
@@ -258,7 +312,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                 gridClass={gridClass}
                 isFetchingMore={recsIsPlaceholder}
                 hasMoreRecommendations={hasMoreRecommendations}
-                recommendationSentinel={recommendationSentinel}
+                recommendationSentinel={setRecommendationSentinel}
               />
             </TabsContent>
 

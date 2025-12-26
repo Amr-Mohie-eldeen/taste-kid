@@ -12,7 +12,7 @@ type RecommendationsProps = {
   gridClass: string;
   isFetchingMore: boolean;
   hasMoreRecommendations: boolean;
-  recommendationSentinel: React.RefObject<HTMLDivElement>;
+  recommendationSentinel: React.Ref<HTMLDivElement>;
 };
 
 export function Recommendations({

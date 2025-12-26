@@ -12,7 +12,7 @@ type FeedProps = {
   gridClass: string;
   isFetchingMore?: boolean;
   hasMore?: boolean;
-  sentinelRef?: React.RefObject<HTMLDivElement>;
+  sentinelRef?: React.Ref<HTMLDivElement>;
 };
 
 export function Feed({ 
