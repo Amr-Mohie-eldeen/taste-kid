@@ -69,10 +69,14 @@ export function Feed({
           )}
           
           {hasMore && (
-            <div ref={sentinelRef} className="h-20 flex items-center justify-center">
-              <div className="flex items-center gap-2 text-muted-foreground animate-pulse">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Expanding Feed</span>
+            <div ref={sentinelRef} className="h-24 flex items-center justify-center border-t border-border/20 mt-8">
+              <div className="flex items-center gap-3 text-muted-foreground animate-pulse">
+                <div className="flex gap-1">
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.3s]" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce [animation-delay:-0.15s]" />
+                  <div className="h-1.5 w-1.5 rounded-full bg-primary animate-bounce" />
+                </div>
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-primary">Expanding Feed Architecture</span>
               </div>
             </div>
           )}

@@ -108,6 +108,9 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     return feed.length >= feedLimit;
   }, [feed, feedIsPlaceholder, feedLimit]);
 
+  const lastTriggeredRecLimit = useRef(20);
+  const lastTriggeredFeedLimit = useRef(20);
+
   // Infinite Scroll Observer
   useEffect(() => {
     const isRecs = activeTab === "recommendations";
@@ -122,19 +125,26 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
       (entries) => {
         const [entry] = entries;
         if (entry.isIntersecting) {
-          if (isRecs && hasMoreRecommendations && !recsIsPlaceholder) {
-            setRecommendationLimit(prev => prev + 20);
-          } else if (isFeed && hasMoreFeed && !feedIsPlaceholder) {
-            setFeedLimit(prev => prev + 20);
+          if (isRecs && hasMoreRecommendations && !recsIsPlaceholder && recommendationLimit === lastTriggeredRecLimit.current) {
+            const nextLimit = recommendationLimit + 20;
+            lastTriggeredRecLimit.current = nextLimit;
+            setRecommendationLimit(nextLimit);
+          } else if (isFeed && hasMoreFeed && !feedIsPlaceholder && feedLimit === lastTriggeredFeedLimit.current) {
+            const nextLimit = feedLimit + 20;
+            lastTriggeredFeedLimit.current = nextLimit;
+            setFeedLimit(nextLimit);
           }
         }
       },
-      { rootMargin: "200px" } 
+      { 
+        rootMargin: "50px",
+        threshold: 0.01 
+      } 
     );
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, hasMoreFeed, feedIsPlaceholder]);
+  }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, hasMoreFeed, feedIsPlaceholder, recommendationLimit, feedLimit]);
 
   // Custom Search State
   const [manualSearchLoading, setManualSearchLoading] = useState(false);
