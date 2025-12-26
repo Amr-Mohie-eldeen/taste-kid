@@ -95,30 +95,65 @@ export function useRateMovie() {
 }
 
 // Movie Detail Hooks
+
 export function useMovieDetail(movieId: number) {
+
   return useQuery({
+
     queryKey: ["movie", movieId],
+
     queryFn: () => api.getMovieDetail(movieId),
+
     enabled: !!movieId && !Number.isNaN(movieId),
+
   });
+
 }
+
+
 
 export function useSimilarMovies(movieId: number) {
+
   return useQuery({
+
     queryKey: ["similarMovies", movieId],
+
     queryFn: () => api.getSimilar(movieId),
+
     enabled: !!movieId && !Number.isNaN(movieId),
+
   });
+
 }
 
-export function useSearchMovie(query: string) {
+
+
+export function useMovieSearch(query: string, enabled: boolean) {
+
   return useQuery({
-    queryKey: ["search", query],
+
+    queryKey: ['search', query],
+
     queryFn: async () => {
+
       const lookup = await api.lookupMovie(query);
-      return lookup;
+
+      const [detail, similar] = await Promise.all([
+
+        api.getMovieDetail(lookup.id),
+
+        api.getSimilar(lookup.id),
+
+      ]);
+
+      return { detail, similar };
+
     },
-    enabled: !!query.trim(),
+
+    enabled: enabled && !!query.trim(),
+
     retry: false,
+
   });
+
 }

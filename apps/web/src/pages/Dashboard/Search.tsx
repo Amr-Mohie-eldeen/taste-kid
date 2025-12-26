@@ -11,7 +11,7 @@ import { formatDate } from "../../lib/utils";
 import { Search as SearchIcon } from "lucide-react";
 
 type SearchProps = {
-  onSearch: (query: string) => Promise<void>;
+  onSearch: (query: string) => void;
   searchLoading: boolean;
   searchError: string | null;
   searchedMovie: MovieDetail | null;

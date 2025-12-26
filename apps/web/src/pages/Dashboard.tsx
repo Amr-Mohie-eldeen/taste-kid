@@ -10,6 +10,7 @@ import {
   useNextMovie,
   useRateMovie,
   useCreateUser,
+  useMovieSearch,
 } from "../lib/hooks";
 import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
@@ -25,7 +26,6 @@ import { Rate } from "./Dashboard/Rate";
 import { Recommendations } from "./Dashboard/Recommendations";
 import { Ratings } from "./Dashboard/Ratings";
 import { Search } from "./Dashboard/Search";
-import { api } from "../lib/api";
 import { 
   UserPlus, 
   LogIn, 
@@ -55,6 +55,10 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const recommendationSentinel = useRef<HTMLDivElement | null>(null);
   const feedSentinel = useRef<HTMLDivElement | null>(null);
 
+  // Search State
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearchEnabled, setIsSearchEnabled] = useState(false);
+
   // Queries
   const { data: userSummary, error: summaryError } = useUserSummary(userId);
   const { data: profileStats } = useProfileStats(userId);
@@ -75,8 +79,11 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const { data: ratingQueue, isLoading: queueLoading } = useRatingQueue(userId);
   const { data: nextMovie, isLoading: nextLoading } = useNextMovie(userId);
 
-  const [searchedMovie, setSearchedMovie] = useState<any>(null);
-  const [similarMovies, setSimilarMovies] = useState<any[]>([]);
+  const {
+    data: searchData,
+    isLoading: searchIsLoading,
+    error: searchError,
+  } = useMovieSearch(searchQuery, isSearchEnabled);
 
   // Mutations
   const createUser = useCreateUser();
@@ -90,9 +97,12 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     ratings?.forEach(m => set.add(m.id));
     ratingQueue?.forEach(m => set.add(m.id));
     if (nextMovie) set.add(nextMovie.id);
-    similarMovies?.forEach(m => set.add(m.id));
+    if (searchData) {
+      set.add(searchData.detail.id);
+      searchData.similar.forEach(m => set.add(m.id));
+    }
     return Array.from(set);
-  }, [feed, recommendations, ratings, ratingQueue, nextMovie, similarMovies]);
+  }, [feed, recommendations, ratings, ratingQueue, nextMovie, searchData]);
 
   usePosterHydration(allIds);
 
@@ -146,30 +156,16 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     return () => observer.disconnect();
   }, [activeTab, hasMoreRecommendations, recsIsPlaceholder, hasMoreFeed, feedIsPlaceholder, recommendationLimit, feedLimit]);
 
-  // Custom Search State
-  const [manualSearchLoading, setManualSearchLoading] = useState(false);
-  const [manualSearchError, setManualSearchError] = useState<string | null>(null);
-
-  const performSearch = async (query: string) => {
-    if (!query.trim()) return;
-    setManualSearchLoading(true);
-    setManualSearchError(null);
-    setSearchedMovie(null);
-    setSimilarMovies([]);
-    
-    try {
-      const lookup = await api.lookupMovie(query);
-      const [detail, similar] = await Promise.all([
-        api.getMovieDetail(lookup.id),
-        api.getSimilar(lookup.id),
-      ]);
-      setSearchedMovie(detail);
-      setSimilarMovies(similar);
-    } catch (error) {
-      setManualSearchError(error instanceof Error ? error.message : "Search failed");
-    } finally {
-      setManualSearchLoading(false);
+  // When tab is not 'search', disable search query
+  useEffect(() => {
+    if (activeTab !== 'search') {
+      setIsSearchEnabled(false);
     }
+  }, [activeTab]);
+  
+  const performSearch = (query: string) => {
+    setSearchQuery(query);
+    setIsSearchEnabled(true);
   };
 
   const handleCreateUser = () => {
@@ -278,10 +274,10 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
             <TabsContent value="search" className="mt-0 focus-visible:ring-0">
               <Search
                 onSearch={performSearch}
-                searchLoading={manualSearchLoading}
-                searchError={manualSearchError}
-                searchedMovie={searchedMovie}
-                similarMovies={similarMovies}
+                searchLoading={searchIsLoading}
+                searchError={searchError instanceof Error ? searchError.message : null}
+                searchedMovie={searchData?.detail ?? null}
+                similarMovies={searchData?.similar ?? []}
                 posterMap={posterMap}
                 gridClass={gridClass}
               />
