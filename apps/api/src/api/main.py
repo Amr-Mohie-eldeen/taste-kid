@@ -1,9 +1,11 @@
 from datetime import date
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from api.config import SIM_CANDIDATES_K, SIM_RERANK_ENABLED, SIM_TOP_N
+from api.config import FRONTEND_ORIGINS, TMDB_BACKDROP_SIZE, TMDB_IMAGE_BASE_URL, TMDB_POSTER_SIZE
 from api.similarity import (
     EmbeddingNotFoundError,
     apply_rerank,
@@ -11,6 +13,7 @@ from api.similarity import (
     find_movie_id_by_title,
     get_similar_candidates,
 )
+from api.movies import fetch_movie_detail
 from api.users import (
     MovieNotFoundError,
     UserNotFoundError,
@@ -20,12 +23,21 @@ from api.users import (
     get_recommendations,
     get_profile_stats,
     get_next_movie,
+    get_feed,
     get_user_summary,
     recompute_profile,
     upsert_rating,
 )
 
 app = FastAPI(title="TMDB RecSys API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class SimilarMovie(BaseModel):
@@ -42,6 +54,24 @@ class MovieLookup(BaseModel):
     title: str | None
 
 
+class MovieDetailResponse(BaseModel):
+    id: int
+    title: str | None
+    original_title: str | None
+    release_date: date | None
+    genres: str | None
+    overview: str | None
+    tagline: str | None
+    runtime: int | None
+    original_language: str | None
+    vote_average: float | None
+    vote_count: int | None
+    poster_path: str | None
+    backdrop_path: str | None
+    poster_url: str | None
+    backdrop_url: str | None
+
+
 class UserCreateRequest(BaseModel):
     display_name: str | None = None
 
@@ -54,6 +84,12 @@ class UserSummaryResponse(BaseModel):
 
 
 class RatingRequest(BaseModel):
+    rating: int | None = Field(default=None, ge=0, le=5)
+    status: str | None = None
+
+
+class RateMovieRequest(BaseModel):
+    movie_id: int
     rating: int | None = Field(default=None, ge=0, le=5)
     status: str | None = None
 
@@ -95,6 +131,16 @@ class NextMovieResponse(BaseModel):
     title: str | None
     release_date: date | None
     genres: str | None
+    source: str
+
+
+class FeedItemResponse(BaseModel):
+    id: int
+    title: str | None
+    release_date: date | None
+    genres: str | None
+    distance: float | None
+    similarity: float | None
     source: str
 
 
@@ -144,6 +190,21 @@ def lookup_movie(title: str = Query(min_length=1)):
     return MovieLookup(id=movie.id, title=movie.title)
 
 
+@app.get("/movies/{movie_id}", response_model=MovieDetailResponse)
+def movie_detail(movie_id: int):
+    movie = fetch_movie_detail(movie_id)
+    if not movie:
+        raise HTTPException(status_code=404, detail="Movie not found")
+    poster_url = None
+    backdrop_url = None
+    if movie.poster_path:
+        poster_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_POSTER_SIZE}{movie.poster_path}"
+    if movie.backdrop_path:
+        backdrop_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_BACKDROP_SIZE}{movie.backdrop_path}"
+    payload = movie.__dict__ | {"poster_url": poster_url, "backdrop_url": backdrop_url}
+    return MovieDetailResponse(**payload)
+
+
 @app.post("/users", response_model=UserSummaryResponse)
 def create_user_profile(payload: UserCreateRequest):
     user_id = create_user(payload.display_name)
@@ -172,6 +233,25 @@ def rate_movie(user_id: int, movie_id: int, payload: RatingRequest):
     rating = payload.rating if status == "watched" else None
     try:
         upsert_rating(user_id, movie_id, rating, status)
+    except (UserNotFoundError, MovieNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    recompute_profile(user_id)
+    return {"status": "ok"}
+
+
+@app.post("/users/{user_id}/rate")
+def rate_movie_simple(user_id: int, payload: RateMovieRequest):
+    if payload.rating is None and payload.status is None:
+        raise HTTPException(status_code=400, detail="rating or status is required")
+
+    status = payload.status or ("watched" if payload.rating is not None else "unwatched")
+    if status not in {"watched", "unwatched"}:
+        raise HTTPException(status_code=400, detail="status must be watched or unwatched")
+
+    rating = payload.rating if status == "watched" else None
+    try:
+        upsert_rating(user_id, payload.movie_id, rating, status)
     except (UserNotFoundError, MovieNotFoundError) as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -224,3 +304,12 @@ def next_movie(user_id: int):
     if movie is None:
         raise HTTPException(status_code=404, detail="No more unrated movies")
     return NextMovieResponse(**movie.__dict__)
+
+
+@app.get("/users/{user_id}/feed", response_model=list[FeedItemResponse])
+def user_feed(user_id: int, k: int = Query(default=20, ge=1, le=100)):
+    try:
+        items = get_feed(user_id, k)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return [FeedItemResponse(**item.__dict__) for item in items]

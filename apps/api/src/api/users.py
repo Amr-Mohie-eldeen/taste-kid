@@ -62,6 +62,17 @@ class NextMovie:
 
 
 @dataclass
+class FeedItem:
+    id: int
+    title: str | None
+    release_date: date | None
+    genres: str | None
+    distance: float | None
+    similarity: float | None
+    source: str
+
+
+@dataclass
 class RatedMovie:
     id: int
     title: str | None
@@ -381,6 +392,43 @@ def get_next_movie(user_id: int) -> NextMovie | None:
     if next_movie:
         return next_movie
     return _get_next_from_popularity(user_id)
+
+
+def get_feed(user_id: int, limit: int) -> list[FeedItem]:
+    _ensure_user(user_id)
+    engine = get_engine()
+    q_profile = text("SELECT 1 FROM user_profiles WHERE user_id = :user_id")
+    with engine.begin() as conn:
+        has_profile = conn.execute(q_profile, {"user_id": user_id}).first() is not None
+
+    if has_profile:
+        recs = get_recommendations(user_id, limit)
+        return [
+            FeedItem(
+                id=item.id,
+                title=item.title,
+                release_date=item.release_date,
+                genres=item.genres,
+                distance=item.distance,
+                similarity=item.similarity,
+                source="profile",
+            )
+            for item in recs
+        ]
+
+    queue = get_rating_queue(user_id, limit)
+    return [
+        FeedItem(
+            id=item.id,
+            title=item.title,
+            release_date=item.release_date,
+            genres=item.genres,
+            distance=None,
+            similarity=None,
+            source="popularity",
+        )
+        for item in queue
+    ]
 
 
 def get_user_ratings(user_id: int, limit: int) -> list[RatedMovie]:
