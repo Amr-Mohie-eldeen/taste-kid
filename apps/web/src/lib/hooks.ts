@@ -42,14 +42,7 @@ export function useFeed(userId: number | null, limit: number) {
   });
 }
 
-export function useRecommendations(userId: number | null, limit: number) {
-  return useQuery({
-    queryKey: ["recommendations", userId, limit],
-    queryFn: () => api.getRecommendations(userId!, limit),
-    enabled: !!userId,
-    placeholderData: keepPreviousData,
-  });
-}
+// Discovery removed from UI; recommendations hook unused
 
 // Ratings & Queue Hooks
 export function useRatings(userId: number | null, limit?: number) {
