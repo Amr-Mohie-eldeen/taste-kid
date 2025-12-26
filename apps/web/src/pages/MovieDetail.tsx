@@ -82,7 +82,7 @@ export function MovieDetail() {
       <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
         <Card className="overflow-hidden">
           <CardContent className="p-6">
-            <div className="aspect-[2/3] w-full overflow-hidden rounded-2xl bg-muted">
+            <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-muted">
               {detail.poster_url || detail.backdrop_url ? (
                 <PosterImage
                   src={detail.poster_url ?? detail.backdrop_url ?? ""}
@@ -91,6 +91,13 @@ export function MovieDetail() {
               ) : (
                 <div className="flex h-full items-center justify-center bg-gradient-to-br from-slate-200 to-slate-100 text-xs text-muted-foreground">
                   No poster
+                </div>
+              )}
+              {typeof detail.vote_average === 'number' && !Number.isNaN(detail.vote_average) && (
+                <div className="absolute right-3 top-3 z-10">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/60 text-[11px] font-bold text-white backdrop-blur-md">
+                    {Math.round(Math.min(100, Math.max(0, detail.vote_average * 10)))}%
+                  </div>
                 </div>
               )}
             </div>
