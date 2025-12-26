@@ -313,3 +313,4 @@ def user_feed(user_id: int, k: int = Query(default=20, ge=1, le=100)):
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [FeedItemResponse(**item.__dict__) for item in items]
+

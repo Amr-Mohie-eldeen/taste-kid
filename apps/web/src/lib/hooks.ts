@@ -150,3 +150,5 @@ export function useMovieSearch(query: string, enabled: boolean) {
   });
 
 }
+
+// user-to-movie match score is derived client-side from feed similarity when available
