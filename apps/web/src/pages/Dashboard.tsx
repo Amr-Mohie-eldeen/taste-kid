@@ -78,6 +78,13 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   usePosterHydration(nextMovie ? [nextMovie.id] : undefined);
   usePosterHydration(similarMovies?.map((item) => item.id));
 
+  const hasMoreRecommendations = useMemo(() => {
+    if (!recommendations) return true;
+    // If we're loading more, we assume there's more until the new data arrives
+    if (isPlaceholderData) return true;
+    return recommendations.length >= recommendationLimit;
+  }, [recommendations, isPlaceholderData, recommendationLimit]);
+
   // Infinite Scroll for Recommendations
   useEffect(() => {
     if (activeTab !== "recommendations") {
@@ -86,26 +93,21 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     }
 
     const target = recommendationSentinel.current;
-    if (!target) return;
+    if (!target || !hasMoreRecommendations || isPlaceholderData) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const [entry] = entries;
-        if (
-          entry?.isIntersecting && 
-          recommendations && 
-          recommendations.length >= recommendationLimit &&
-          !isPlaceholderData
-        ) {
+        if (entry?.isIntersecting) {
           setRecommendationLimit((prev) => prev + 20);
         }
       },
-      { rootMargin: "200px" }
+      { rootMargin: "400px" }
     );
 
     observer.observe(target);
     return () => observer.disconnect();
-  }, [activeTab, recommendations, recommendationLimit, isPlaceholderData]);
+  }, [activeTab, hasMoreRecommendations, isPlaceholderData]);
 
   // Custom Search State
   const [manualSearchLoading, setManualSearchLoading] = useState(false);
@@ -212,18 +214,17 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               />
             </TabsContent>
 
-            <TabsContent value="recommendations" className="mt-0 focus-visible:ring-0">
-              <Recommendations
-                recommendations={recommendations || []}
-                posterMap={posterMap}
-                loading={recsLoading}
-                gridClass={gridClass}
-                isFetchingMore={isPlaceholderData}
-                hasMoreRecommendations={!!recommendations && recommendations.length >= recommendationLimit}
-                recommendationSentinel={recommendationSentinel}
-              />
-            </TabsContent>
-
+                        <TabsContent value="recommendations" className="mt-0 focus-visible:ring-0">
+                          <Recommendations
+                            recommendations={recommendations || []}
+                            posterMap={posterMap}
+                            loading={recsLoading}
+                            gridClass={gridClass}
+                            isFetchingMore={isPlaceholderData}
+                            hasMoreRecommendations={hasMoreRecommendations}
+                            recommendationSentinel={recommendationSentinel}
+                          />
+                        </TabsContent>
             <TabsContent value="ratings" className="mt-0 focus-visible:ring-0">
               <Ratings
                 ratings={ratings || []}
