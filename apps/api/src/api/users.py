@@ -476,7 +476,7 @@ def get_user_movie_match(user_id: int, movie_id: int) -> UserMovieMatch:
         return UserMovieMatch(score=None)
     distance = float(row[0])
     similarity = 1.0 - distance
-    score = round(min(100, max(0, similarity * 100)))
+    score = round(min(100.0, max(0.0, similarity * 100)), 2)
     return UserMovieMatch(score=score)
 
 
