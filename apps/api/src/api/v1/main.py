@@ -1,4 +1,5 @@
 from datetime import date
+from typing import Any, Generic, TypeVar
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -7,15 +8,12 @@ from api.config import SIM_CANDIDATES_K, SIM_RERANK_ENABLED, SIM_TOP_N
 from api.config import TMDB_BACKDROP_SIZE, TMDB_IMAGE_BASE_URL, TMDB_POSTER_SIZE
 from api.movies import fetch_movie_detail
 from api.similarity import (
-    EmbeddingNotFoundError,
     apply_rerank,
     fetch_movie_metadata,
     find_movie_id_by_title,
     get_similar_candidates,
 )
 from api.users import (
-    MovieNotFoundError,
-    UserNotFoundError,
     create_user,
     get_feed,
     get_next_movie,
@@ -31,6 +29,13 @@ from api.users import (
 
 router = APIRouter()
 
+ResponseData = TypeVar("ResponseData")
+
+
+class ResponseEnvelope(BaseModel, Generic[ResponseData]):
+    data: ResponseData
+    meta: dict[str, Any] = Field(default_factory=dict)
+
 
 def _build_image_urls(poster_path: str | None, backdrop_path: str | None) -> tuple[str | None, str | None]:
     poster_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_POSTER_SIZE}{poster_path}" if poster_path else None
@@ -45,6 +50,10 @@ def _with_image_urls(item) -> dict:
 
 def _map_with_image_urls(items, response_cls):
     return [response_cls(**_with_image_urls(item)) for item in items]
+
+
+def _envelope(data: ResponseData, meta: dict[str, Any] | None = None) -> ResponseEnvelope[ResponseData]:
+    return ResponseEnvelope(data=data, meta=meta or {})
 
 
 class SimilarMovie(BaseModel):
@@ -176,21 +185,17 @@ def _process_rating(user_id: int, movie_id: int, rating: int | None, status: str
         raise HTTPException(status_code=400, detail="status must be watched or unwatched")
 
     resolved_rating = rating if resolved_status == "watched" else None
-    try:
-        upsert_rating(user_id, movie_id, resolved_rating, resolved_status)
-    except (UserNotFoundError, MovieNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
+    upsert_rating(user_id, movie_id, resolved_rating, resolved_status)
     recompute_profile(user_id)
-    return {"status": "ok"}
+    return _envelope({"status": "ok"})
 
 
-@router.get("/health")
+@router.get("/health", response_model=ResponseEnvelope[dict[str, str]])
 def health():
-    return {"status": "ok"}
+    return _envelope({"status": "ok"})
 
 
-@router.get("/movies/{movie_id}/similar", response_model=list[SimilarMovie])
+@router.get("/movies/{movie_id}/similar", response_model=ResponseEnvelope[list[SimilarMovie]])
 def similar_movies(movie_id: int, k: int | None = Query(default=None, ge=1, le=100)):
     top_n = k or SIM_TOP_N
     candidates_k = max(top_n, SIM_CANDIDATES_K)
@@ -198,10 +203,7 @@ def similar_movies(movie_id: int, k: int | None = Query(default=None, ge=1, le=1
     if not anchor:
         raise HTTPException(status_code=404, detail="Movie not found")
 
-    try:
-        candidates = get_similar_candidates(movie_id, k=candidates_k)
-    except EmbeddingNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    candidates = get_similar_candidates(movie_id, k=candidates_k)
 
     if SIM_RERANK_ENABLED:
         ranked = apply_rerank(anchor, candidates, top_n)
@@ -210,113 +212,89 @@ def similar_movies(movie_id: int, k: int | None = Query(default=None, ge=1, le=1
         for candidate in ranked:
             candidate.score = None
 
-    return _map_with_image_urls(ranked, SimilarMovie)
+    return _envelope(_map_with_image_urls(ranked, SimilarMovie))
 
 
-@router.get("/movies/lookup", response_model=MovieLookup)
+@router.get("/movies/lookup", response_model=ResponseEnvelope[MovieLookup])
 def lookup_movie(title: str = Query(min_length=1)):
     movie = find_movie_id_by_title(title)
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
-    return MovieLookup(id=movie.id, title=movie.title)
+    return _envelope(MovieLookup(id=movie.id, title=movie.title))
 
 
-@router.get("/movies/{movie_id}", response_model=MovieDetailResponse)
+@router.get("/movies/{movie_id}", response_model=ResponseEnvelope[MovieDetailResponse])
 def movie_detail(movie_id: int):
     movie = fetch_movie_detail(movie_id)
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
     poster_url, backdrop_url = _build_image_urls(movie.poster_path, movie.backdrop_path)
     payload = movie.__dict__ | {"poster_url": poster_url, "backdrop_url": backdrop_url}
-    return MovieDetailResponse(**payload)
+    return _envelope(MovieDetailResponse(**payload))
 
 
-@router.post("/users", response_model=UserSummaryResponse)
+@router.post("/users", response_model=ResponseEnvelope[UserSummaryResponse])
 def create_user_profile(payload: UserCreateRequest):
     user_id = create_user(payload.display_name)
     summary = get_user_summary(user_id)
-    return UserSummaryResponse(**summary.__dict__)
+    return _envelope(UserSummaryResponse(**summary.__dict__))
 
 
-@router.get("/users/{user_id}", response_model=UserSummaryResponse)
+@router.get("/users/{user_id}", response_model=ResponseEnvelope[UserSummaryResponse])
 def get_user_profile(user_id: int):
-    try:
-        summary = get_user_summary(user_id)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return UserSummaryResponse(**summary.__dict__)
+    summary = get_user_summary(user_id)
+    return _envelope(UserSummaryResponse(**summary.__dict__))
 
 
-@router.put("/users/{user_id}/ratings/{movie_id}")
+@router.put("/users/{user_id}/ratings/{movie_id}", response_model=ResponseEnvelope[dict[str, str]])
 def rate_movie(user_id: int, movie_id: int, payload: RatingRequest):
     return _process_rating(user_id, movie_id, payload.rating, payload.status)
 
 
-@router.post("/users/{user_id}/rate")
+@router.post("/users/{user_id}/rate", response_model=ResponseEnvelope[dict[str, str]])
 def rate_movie_simple(user_id: int, payload: RateMovieRequest):
     return _process_rating(user_id, payload.movie_id, payload.rating, payload.status)
 
 
-@router.get("/users/{user_id}/recommendations", response_model=list[RecommendationResponse])
+@router.get("/users/{user_id}/recommendations", response_model=ResponseEnvelope[list[RecommendationResponse]])
 def user_recommendations(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    try:
-        recs = get_recommendations(user_id, k)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _map_with_image_urls(recs, RecommendationResponse)
+    recs = get_recommendations(user_id, k)
+    return _envelope(_map_with_image_urls(recs, RecommendationResponse))
 
 
-@router.get("/users/{user_id}/rating-queue", response_model=list[RatingQueueResponse])
+@router.get("/users/{user_id}/rating-queue", response_model=ResponseEnvelope[list[RatingQueueResponse]])
 def rating_queue(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    try:
-        queue = get_rating_queue(user_id, k)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _map_with_image_urls(queue, RatingQueueResponse)
+    queue = get_rating_queue(user_id, k)
+    return _envelope(_map_with_image_urls(queue, RatingQueueResponse))
 
 
-@router.get("/users/{user_id}/ratings", response_model=list[RatedMovieResponse])
+@router.get("/users/{user_id}/ratings", response_model=ResponseEnvelope[list[RatedMovieResponse]])
 def user_ratings(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    try:
-        ratings = get_user_ratings(user_id, k)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _map_with_image_urls(ratings, RatedMovieResponse)
+    ratings = get_user_ratings(user_id, k)
+    return _envelope(_map_with_image_urls(ratings, RatedMovieResponse))
 
 
-@router.get("/users/{user_id}/profile", response_model=ProfileStatsResponse)
+@router.get("/users/{user_id}/profile", response_model=ResponseEnvelope[ProfileStatsResponse])
 def profile_stats(user_id: int):
-    try:
-        stats = get_profile_stats(user_id)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return ProfileStatsResponse(**stats.__dict__)
+    stats = get_profile_stats(user_id)
+    return _envelope(ProfileStatsResponse(**stats.__dict__))
 
 
-@router.get("/users/{user_id}/next", response_model=NextMovieResponse)
+@router.get("/users/{user_id}/next", response_model=ResponseEnvelope[NextMovieResponse])
 def next_movie(user_id: int):
-    try:
-        movie = get_next_movie(user_id)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    movie = get_next_movie(user_id)
     if movie is None:
         raise HTTPException(status_code=404, detail="No more unrated movies")
-    return NextMovieResponse(**_with_image_urls(movie))
+    return _envelope(NextMovieResponse(**_with_image_urls(movie)))
 
 
-@router.get("/users/{user_id}/feed", response_model=list[FeedItemResponse])
+@router.get("/users/{user_id}/feed", response_model=ResponseEnvelope[list[FeedItemResponse]])
 def user_feed(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    try:
-        items = get_feed(user_id, k)
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return _map_with_image_urls(items, FeedItemResponse)
+    items = get_feed(user_id, k)
+    return _envelope(_map_with_image_urls(items, FeedItemResponse))
 
 
-@router.get("/users/{user_id}/movies/{movie_id}/match", response_model=UserMovieMatchResponse)
+@router.get("/users/{user_id}/movies/{movie_id}/match", response_model=ResponseEnvelope[UserMovieMatchResponse])
 def user_movie_match(user_id: int, movie_id: int):
-    try:
-        match = get_user_movie_match(user_id, movie_id)
-    except (UserNotFoundError, MovieNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return UserMovieMatchResponse(**match.__dict__)
+    match = get_user_movie_match(user_id, movie_id)
+    return _envelope(UserMovieMatchResponse(**match.__dict__))
