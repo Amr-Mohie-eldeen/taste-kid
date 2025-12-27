@@ -41,7 +41,7 @@ Key variables used by the stack:
 
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`
 - `API_PORT`
-- `VITE_API_URL` (frontend API base; defaults to `http://localhost:8000`)
+- `VITE_API_URL` (frontend API base; defaults to `http://localhost:8000`, with `/v1` appended)
 
 ## Frontend
 

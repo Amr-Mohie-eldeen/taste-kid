@@ -10,7 +10,7 @@ npm install
 npm run dev
 ```
 
-Set the API base URL if your FastAPI instance is not running on `http://localhost:8000`:
+Set the API base URL if your FastAPI instance is not running on `http://localhost:8000` (the client appends `/v1` automatically):
 
 ```bash
 export VITE_API_URL="http://localhost:8000"
