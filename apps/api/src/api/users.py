@@ -82,7 +82,7 @@ class FeedItem:
 
 @dataclass
 class UserMovieMatch:
-    score: int | None
+    score: float | None
 
 
 @dataclass

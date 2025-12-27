@@ -164,7 +164,7 @@ class FeedItemResponse(BaseModel):
 
 
 class UserMovieMatchResponse(BaseModel):
-    score: int | None
+    score: float | None
 
 
 def _process_rating(user_id: int, movie_id: int, rating: int | None, status: str | None):
