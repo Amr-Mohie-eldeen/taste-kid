@@ -103,11 +103,28 @@ export type UserMovieMatch = {
   score: number | null;
 };
 
+type ApiSuccess<T> = {
+  data: T;
+  meta?: Record<string, unknown>;
+};
+
+type ApiFailure = {
+  error: {
+    code: string;
+    message: string;
+    details?: unknown;
+  };
+};
+
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  code?: string;
+  details?: unknown;
+  constructor(status: number, message: string, code?: string, details?: unknown) {
     super(message);
     this.status = status;
+    this.code = code;
+    this.details = details;
   }
 }
 
@@ -117,16 +134,32 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
 
+  const rawText = await response.text();
+  let payload: ApiSuccess<T> | ApiFailure | null = null;
+  if (rawText) {
+    try {
+      payload = JSON.parse(rawText) as ApiSuccess<T> | ApiFailure;
+    } catch {
+      payload = null;
+    }
+  }
+
   if (!response.ok) {
-    const text = await response.text();
-    throw new ApiError(response.status, text || response.statusText);
+    if (payload && "error" in payload) {
+      throw new ApiError(response.status, payload.error.message, payload.error.code, payload.error.details);
+    }
+    throw new ApiError(response.status, response.statusText);
   }
 
   if (response.status === 204) {
     return null as T;
   }
 
-  return (await response.json()) as T;
+  if (payload && "data" in payload) {
+    return payload.data as T;
+  }
+
+  return payload as T;
 }
 
 export const api = {
