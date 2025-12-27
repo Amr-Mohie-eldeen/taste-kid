@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, keepPreviousData } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, useInfiniteQuery } from "@tanstack/react-query";
 import { api } from "./api";
 import { useStore } from "./store";
 
@@ -34,29 +34,35 @@ export function useCreateUser() {
 
 // Feed & Recommendations Hooks
 export function useFeed(userId: number | null, limit: number) {
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: ["feed", userId, limit],
-    queryFn: () => api.getFeed(userId!, limit),
+    queryFn: ({ pageParam }) => api.getFeed(userId!, limit, pageParam ?? null),
+    getNextPageParam: (lastPage) => lastPage.meta.has_more ? lastPage.meta.next_cursor ?? undefined : undefined,
     enabled: !!userId,
-    placeholderData: keepPreviousData,
+    initialPageParam: null,
   });
 }
 
 // Discovery removed from UI; recommendations hook unused
 
 // Ratings & Queue Hooks
-export function useRatings(userId: number | null, limit?: number) {
-  return useQuery({
+export function useRatings(userId: number | null, limit = 20) {
+  return useInfiniteQuery({
     queryKey: ["ratings", userId, limit],
-    queryFn: () => api.getRatings(userId!, limit ?? 20),
+    queryFn: ({ pageParam }) => api.getRatings(userId!, limit, pageParam ?? null),
+    getNextPageParam: (lastPage) => lastPage.meta.has_more ? lastPage.meta.next_cursor ?? undefined : undefined,
     enabled: !!userId,
+    initialPageParam: null,
   });
 }
 
-export function useRatingQueue(userId: number | null) {
+export function useRatingQueue(userId: number | null, limit = 20) {
   return useQuery({
-    queryKey: ["ratingQueue", userId],
-    queryFn: () => api.getRatingQueue(userId!),
+    queryKey: ["ratingQueue", userId, limit],
+    queryFn: async () => {
+      const page = await api.getRatingQueue(userId!, limit, null);
+      return page.items;
+    },
     enabled: !!userId,
   });
 }
@@ -105,18 +111,15 @@ export function useMovieDetail(movieId: number) {
 
 
 
-export function useSimilarMovies(movieId: number) {
-
+export function useSimilarMovies(movieId: number, limit = 10) {
   return useQuery({
-
-    queryKey: ["similarMovies", movieId],
-
-    queryFn: () => api.getSimilar(movieId),
-
+    queryKey: ["similarMovies", movieId, limit],
+    queryFn: async () => {
+      const page = await api.getSimilar(movieId, limit, null);
+      return page.items;
+    },
     enabled: !!movieId && !Number.isNaN(movieId),
-
   });
-
 }
 
 export function useUserMovieMatch(userId: number | null, movieId: number | null) {
@@ -140,14 +143,11 @@ export function useMovieSearch(query: string, enabled: boolean) {
       const lookup = await api.lookupMovie(query);
 
       const [detail, similar] = await Promise.all([
-
         api.getMovieDetail(lookup.id),
-
         api.getSimilar(lookup.id),
-
       ]);
 
-      return { detail, similar };
+      return { detail, similar: similar.items };
 
     },
 

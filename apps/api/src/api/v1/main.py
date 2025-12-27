@@ -56,6 +56,13 @@ def _envelope(data: ResponseData, meta: dict[str, Any] | None = None) -> Respons
     return ResponseEnvelope(data=data, meta=meta or {})
 
 
+def _paginate(items: list[ResponseData], cursor: int, limit: int) -> tuple[list[ResponseData], dict[str, Any]]:
+    has_more = len(items) > limit
+    page_items = items[:limit]
+    next_cursor = str(cursor + limit) if has_more else None
+    return page_items, {"next_cursor": next_cursor, "has_more": has_more}
+
+
 class SimilarMovie(BaseModel):
     id: int
     title: str | None
@@ -196,9 +203,14 @@ def health():
 
 
 @router.get("/movies/{movie_id}/similar", response_model=ResponseEnvelope[list[SimilarMovie]])
-def similar_movies(movie_id: int, k: int | None = Query(default=None, ge=1, le=100)):
-    top_n = k or SIM_TOP_N
-    candidates_k = max(top_n, SIM_CANDIDATES_K)
+def similar_movies(
+    movie_id: int,
+    k: int | None = Query(default=None, ge=1, le=100),
+    cursor: int = Query(default=0, ge=0),
+):
+    page_size = k or SIM_TOP_N
+    requested = page_size + cursor + 1
+    candidates_k = max(requested, SIM_CANDIDATES_K)
     anchor = fetch_movie_metadata(movie_id)
     if not anchor:
         raise HTTPException(status_code=404, detail="Movie not found")
@@ -206,13 +218,14 @@ def similar_movies(movie_id: int, k: int | None = Query(default=None, ge=1, le=1
     candidates = get_similar_candidates(movie_id, k=candidates_k)
 
     if SIM_RERANK_ENABLED:
-        ranked = apply_rerank(anchor, candidates, top_n)
+        ranked = apply_rerank(anchor, candidates, requested)
     else:
-        ranked = candidates[:top_n]
+        ranked = candidates[:requested]
         for candidate in ranked:
             candidate.score = None
 
-    return _envelope(_map_with_image_urls(ranked, SimilarMovie))
+    page_candidates, meta = _paginate(ranked[cursor:], cursor, page_size)
+    return _envelope(_map_with_image_urls(page_candidates, SimilarMovie), meta)
 
 
 @router.get("/movies/lookup", response_model=ResponseEnvelope[MovieLookup])
@@ -257,21 +270,36 @@ def rate_movie_simple(user_id: int, payload: RateMovieRequest):
 
 
 @router.get("/users/{user_id}/recommendations", response_model=ResponseEnvelope[list[RecommendationResponse]])
-def user_recommendations(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    recs = get_recommendations(user_id, k)
-    return _envelope(_map_with_image_urls(recs, RecommendationResponse))
+def user_recommendations(
+    user_id: int,
+    k: int = Query(default=20, ge=1, le=100),
+    cursor: int = Query(default=0, ge=0),
+):
+    recs = get_recommendations(user_id, k + 1, cursor)
+    page_recs, meta = _paginate(recs, cursor, k)
+    return _envelope(_map_with_image_urls(page_recs, RecommendationResponse), meta)
 
 
 @router.get("/users/{user_id}/rating-queue", response_model=ResponseEnvelope[list[RatingQueueResponse]])
-def rating_queue(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    queue = get_rating_queue(user_id, k)
-    return _envelope(_map_with_image_urls(queue, RatingQueueResponse))
+def rating_queue(
+    user_id: int,
+    k: int = Query(default=20, ge=1, le=100),
+    cursor: int = Query(default=0, ge=0),
+):
+    queue = get_rating_queue(user_id, k + 1, cursor)
+    page_queue, meta = _paginate(queue, cursor, k)
+    return _envelope(_map_with_image_urls(page_queue, RatingQueueResponse), meta)
 
 
 @router.get("/users/{user_id}/ratings", response_model=ResponseEnvelope[list[RatedMovieResponse]])
-def user_ratings(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    ratings = get_user_ratings(user_id, k)
-    return _envelope(_map_with_image_urls(ratings, RatedMovieResponse))
+def user_ratings(
+    user_id: int,
+    k: int = Query(default=20, ge=1, le=100),
+    cursor: int = Query(default=0, ge=0),
+):
+    ratings = get_user_ratings(user_id, k + 1, cursor)
+    page_ratings, meta = _paginate(ratings, cursor, k)
+    return _envelope(_map_with_image_urls(page_ratings, RatedMovieResponse), meta)
 
 
 @router.get("/users/{user_id}/profile", response_model=ResponseEnvelope[ProfileStatsResponse])
@@ -289,9 +317,14 @@ def next_movie(user_id: int):
 
 
 @router.get("/users/{user_id}/feed", response_model=ResponseEnvelope[list[FeedItemResponse]])
-def user_feed(user_id: int, k: int = Query(default=20, ge=1, le=100)):
-    items = get_feed(user_id, k)
-    return _envelope(_map_with_image_urls(items, FeedItemResponse))
+def user_feed(
+    user_id: int,
+    k: int = Query(default=20, ge=1, le=100),
+    cursor: int = Query(default=0, ge=0),
+):
+    items = get_feed(user_id, k + 1, cursor)
+    page_items, meta = _paginate(items, cursor, k)
+    return _envelope(_map_with_image_urls(page_items, FeedItemResponse), meta)
 
 
 @router.get("/users/{user_id}/movies/{movie_id}/match", response_model=ResponseEnvelope[UserMovieMatchResponse])
