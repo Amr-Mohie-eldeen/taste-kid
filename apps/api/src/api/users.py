@@ -31,6 +31,8 @@ class Recommendation:
     title: str | None
     release_date: date | None
     genres: str | None
+    poster_path: str | None
+    backdrop_path: str | None
     distance: float
     similarity: float | None = None
 
@@ -41,6 +43,8 @@ class RatingQueueItem:
     title: str | None
     release_date: date | None
     genres: str | None
+    poster_path: str | None
+    backdrop_path: str | None
 
 
 @dataclass
@@ -58,6 +62,8 @@ class NextMovie:
     title: str | None
     release_date: date | None
     genres: str | None
+    poster_path: str | None
+    backdrop_path: str | None
     source: str
 
 
@@ -67,6 +73,8 @@ class FeedItem:
     title: str | None
     release_date: date | None
     genres: str | None
+    poster_path: str | None
+    backdrop_path: str | None
     distance: float | None
     similarity: float | None
     source: str
@@ -81,6 +89,8 @@ class UserMovieMatch:
 class RatedMovie:
     id: int
     title: str | None
+    poster_path: str | None
+    backdrop_path: str | None
     rating: int | None
     status: str
     updated_at: str | None
@@ -265,6 +275,8 @@ def get_recommendations(user_id: int, limit: int) -> list[Recommendation]:
                m.title,
                m.release_date,
                m.genres,
+               m.poster_path,
+               m.backdrop_path,
                (e.embedding <=> :embedding) AS distance
         FROM movie_embeddings e
         JOIN movies m ON m.id = e.movie_id
@@ -301,7 +313,9 @@ def get_rating_queue(user_id: int, limit: int) -> list[RatingQueueItem]:
         SELECT m.id,
                m.title,
                m.release_date,
-               m.genres
+               m.genres,
+               m.poster_path,
+               m.backdrop_path
         FROM movies m
         LEFT JOIN user_movie_ratings r
           ON r.movie_id = m.id
@@ -331,7 +345,9 @@ def _get_next_from_recs(user_id: int) -> NextMovie | None:
         SELECT m.id,
                m.title,
                m.release_date,
-               m.genres
+               m.genres,
+               m.poster_path,
+               m.backdrop_path
         FROM user_profiles p
         JOIN movie_embeddings e ON TRUE
         JOIN movies m ON m.id = e.movie_id
@@ -367,7 +383,9 @@ def _get_next_from_popularity(user_id: int) -> NextMovie | None:
         SELECT m.id,
                m.title,
                m.release_date,
-               m.genres
+               m.genres,
+               m.poster_path,
+               m.backdrop_path
         FROM movies m
         LEFT JOIN user_movie_ratings r
           ON r.movie_id = m.id
@@ -414,6 +432,8 @@ def get_feed(user_id: int, limit: int) -> list[FeedItem]:
                 title=item.title,
                 release_date=item.release_date,
                 genres=item.genres,
+                poster_path=item.poster_path,
+                backdrop_path=item.backdrop_path,
                 distance=item.distance,
                 similarity=item.similarity,
                 source="profile",
@@ -428,6 +448,8 @@ def get_feed(user_id: int, limit: int) -> list[FeedItem]:
             title=item.title,
             release_date=item.release_date,
             genres=item.genres,
+            poster_path=item.poster_path,
+            backdrop_path=item.backdrop_path,
             distance=None,
             similarity=None,
             source="popularity",
@@ -465,6 +487,8 @@ def get_user_ratings(user_id: int, limit: int) -> list[RatedMovie]:
         """
         SELECT m.id,
                m.title,
+               m.poster_path,
+               m.backdrop_path,
                r.rating,
                r.status,
                r.updated_at
@@ -481,6 +505,8 @@ def get_user_ratings(user_id: int, limit: int) -> list[RatedMovie]:
         RatedMovie(
             id=row["id"],
             title=row["title"],
+            poster_path=row["poster_path"],
+            backdrop_path=row["backdrop_path"],
             rating=row["rating"],
             status=row["status"],
             updated_at=str(row["updated_at"]) if row["updated_at"] else None,

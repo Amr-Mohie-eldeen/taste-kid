@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useStore } from "../lib/store";
 import {
   useUserSummary,
   useProfileStats,
@@ -11,7 +10,6 @@ import {
   useCreateUser,
   useMovieSearch,
 } from "../lib/hooks";
-import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -41,7 +39,6 @@ type DashboardProps = {
 };
 
 export function Dashboard({ userId, setUserId }: DashboardProps) {
-  const { posterMap } = useStore();
   const [displayName, setDisplayName] = useState("");
   const [existingUserId, setExistingUserId] = useState("");
   const [activeTab, setActiveTab] = useState("feed");
@@ -81,22 +78,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   // Mutations
   const createUser = useCreateUser();
   const rateMovie = useRateMovie();
-
-  // Consolidated Poster Hydration
-  const allIds = useMemo(() => {
-    const set = new Set<number>();
-    feed?.forEach(m => set.add(m.id));
-    ratings?.forEach(m => set.add(m.id));
-    ratingQueue?.forEach(m => set.add(m.id));
-    if (nextMovie) set.add(nextMovie.id);
-    if (searchData) {
-      set.add(searchData.detail.id);
-      searchData.similar.forEach(m => set.add(m.id));
-    }
-    return Array.from(set);
-  }, [feed, ratings, ratingQueue, nextMovie, searchData]);
-
-  usePosterHydration(allIds);
 
   const hasMoreFeed = useMemo(() => {
     if (!feed) return false;
@@ -221,7 +202,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
             <TabsContent value="feed" className="mt-0 focus-visible:ring-0">
               <Feed
                 feed={feed || []}
-                posterMap={posterMap}
                 loading={feedLoading}
                 gridClass={gridClass}
                 isFetchingMore={feedIsPlaceholder}
@@ -234,7 +214,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               <Rate
                 nextMovie={nextMovie}
                 ratingQueue={ratingQueue || []}
-                posterMap={posterMap}
                 loading={queueLoading || nextLoading}
                 onRateMovie={handleRateMovie}
               />
@@ -245,7 +224,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
             <TabsContent value="ratings" className="mt-0 focus-visible:ring-0">
               <Ratings
                 ratings={ratings || []}
-                posterMap={posterMap}
                 loading={ratingsLoading}
                 gridClass={gridClass}
               />
@@ -258,7 +236,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                 searchError={searchError instanceof Error ? searchError.message : null}
                 searchedMovie={searchData?.detail ?? null}
                 similarMovies={searchData?.similar ?? []}
-                posterMap={posterMap}
                 gridClass={gridClass}
               />
             </TabsContent>

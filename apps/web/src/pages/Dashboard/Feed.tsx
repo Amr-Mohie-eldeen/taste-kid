@@ -7,7 +7,6 @@ import { FeedItem } from "../../lib/api";
 
 type FeedProps = {
   feed: FeedItem[];
-  posterMap: Record<number, string | null>;
   loading: boolean;
   gridClass: string;
   isFetchingMore?: boolean;
@@ -17,7 +16,6 @@ type FeedProps = {
 
 export function Feed({ 
   feed, 
-  posterMap, 
   loading, 
   gridClass,
   isFetchingMore,
@@ -53,7 +51,7 @@ export function Feed({
                 title={item.title}
                 releaseDateLabel={item.release_date ? formatDate(item.release_date) : null}
                 genres={item.genres}
-                imageUrl={posterMap[item.id]}
+                imageUrl={item.poster_url ?? item.backdrop_url}
                 to={`/movie/${item.id}`}
                 similarity={item.similarity}
               />
