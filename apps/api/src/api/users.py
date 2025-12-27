@@ -259,7 +259,7 @@ def recompute_profile(user_id: int) -> None:
         )
 
 
-def get_recommendations(user_id: int, limit: int) -> list[Recommendation]:
+def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
     _ensure_user(user_id)
     engine = get_engine()
     q_profile = text("SELECT embedding AS embedding FROM user_profiles WHERE user_id = :user_id")
@@ -287,6 +287,7 @@ def get_recommendations(user_id: int, limit: int) -> list[Recommendation]:
            OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
         ORDER BY e.embedding <=> :embedding
         LIMIT :limit
+        OFFSET :offset
         """
     )
     with engine.begin() as conn:
@@ -296,6 +297,7 @@ def get_recommendations(user_id: int, limit: int) -> list[Recommendation]:
                 "user_id": user_id,
                 "embedding": embedding,
                 "limit": limit,
+                "offset": offset,
                 "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
             },
         ).mappings().all()
@@ -305,7 +307,7 @@ def get_recommendations(user_id: int, limit: int) -> list[Recommendation]:
     return results
 
 
-def get_rating_queue(user_id: int, limit: int) -> list[RatingQueueItem]:
+def get_rating_queue(user_id: int, limit: int, offset: int = 0) -> list[RatingQueueItem]:
     _ensure_user(user_id)
     engine = get_engine()
     q = text(
@@ -324,6 +326,7 @@ def get_rating_queue(user_id: int, limit: int) -> list[RatingQueueItem]:
            OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
         ORDER BY m.vote_count DESC NULLS LAST
         LIMIT :limit
+        OFFSET :offset
         """
     )
     with engine.begin() as conn:
@@ -332,6 +335,7 @@ def get_rating_queue(user_id: int, limit: int) -> list[RatingQueueItem]:
             {
                 "user_id": user_id,
                 "limit": limit,
+                "offset": offset,
                 "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
             },
         ).mappings().all()
@@ -417,7 +421,7 @@ def get_next_movie(user_id: int) -> NextMovie | None:
     return _get_next_from_popularity(user_id)
 
 
-def get_feed(user_id: int, limit: int) -> list[FeedItem]:
+def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
     _ensure_user(user_id)
     engine = get_engine()
     q_profile = text("SELECT 1 FROM user_profiles WHERE user_id = :user_id")
@@ -425,7 +429,7 @@ def get_feed(user_id: int, limit: int) -> list[FeedItem]:
         has_profile = conn.execute(q_profile, {"user_id": user_id}).first() is not None
 
     if has_profile:
-        recs = get_recommendations(user_id, limit)
+        recs = get_recommendations(user_id, limit, offset)
         return [
             FeedItem(
                 id=item.id,
@@ -441,7 +445,7 @@ def get_feed(user_id: int, limit: int) -> list[FeedItem]:
             for item in recs
         ]
 
-    queue = get_rating_queue(user_id, limit)
+    queue = get_rating_queue(user_id, limit, offset)
     return [
         FeedItem(
             id=item.id,
@@ -480,7 +484,7 @@ def get_user_movie_match(user_id: int, movie_id: int) -> UserMovieMatch:
     return UserMovieMatch(score=score)
 
 
-def get_user_ratings(user_id: int, limit: int) -> list[RatedMovie]:
+def get_user_ratings(user_id: int, limit: int, offset: int = 0) -> list[RatedMovie]:
     _ensure_user(user_id)
     engine = get_engine()
     q = text(
@@ -497,10 +501,11 @@ def get_user_ratings(user_id: int, limit: int) -> list[RatedMovie]:
         WHERE r.user_id = :user_id
         ORDER BY r.updated_at DESC NULLS LAST
         LIMIT :limit
+        OFFSET :offset
         """
     )
     with engine.begin() as conn:
-        rows = conn.execute(q, {"user_id": user_id, "limit": limit}).mappings().all()
+        rows = conn.execute(q, {"user_id": user_id, "limit": limit, "offset": offset}).mappings().all()
     return [
         RatedMovie(
             id=row["id"],

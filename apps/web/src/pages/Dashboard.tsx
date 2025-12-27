@@ -43,8 +43,8 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const [existingUserId, setExistingUserId] = useState("");
   const [activeTab, setActiveTab] = useState("feed");
   
-  // Pagination State
-  const [feedLimit, setFeedLimit] = useState(20);
+  const feedPageSize = 20;
+  const ratingsPageSize = 20;
   
   // Sentinel + observer for feed
   const feedSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -58,14 +58,21 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const { data: userSummary, error: summaryError } = useUserSummary(userId);
   const { data: profileStats } = useProfileStats(userId);
   
-  const { 
-    data: feed, 
-    isLoading: feedLoading, 
-    isPlaceholderData: feedIsPlaceholder,
-    isFetching: feedFetching,
-  } = useFeed(userId, feedLimit);
-  
-  const { data: ratings, isLoading: ratingsLoading } = useRatings(userId);
+  const {
+    data: feed,
+    isLoading: feedLoading,
+    isFetchingNextPage: feedFetchingNextPage,
+    hasNextPage: feedHasNextPage,
+    fetchNextPage: fetchNextFeedPage,
+  } = useFeed(userId, feedPageSize);
+
+  const {
+    data: ratings,
+    isLoading: ratingsLoading,
+    isFetchingNextPage: ratingsFetchingNextPage,
+    hasNextPage: ratingsHasNextPage,
+    fetchNextPage: fetchNextRatingsPage,
+  } = useRatings(userId, ratingsPageSize);
   const { data: ratingQueue, isLoading: queueLoading } = useRatingQueue(userId);
   const { data: nextMovie, isLoading: nextLoading } = useNextMovie(userId);
 
@@ -79,13 +86,14 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   const createUser = useCreateUser();
   const rateMovie = useRateMovie();
 
-  const hasMoreFeed = useMemo(() => {
-    if (!feed) return false;
-    if (feedIsPlaceholder) return true;
-    return feed.length >= feedLimit;
-  }, [feed, feedIsPlaceholder, feedLimit]);
-
-  const lastTriggeredFeedLimit = useRef(20);
+  const feedItems = useMemo(
+    () => feed?.pages.flatMap((page) => page.items) ?? [],
+    [feed]
+  );
+  const ratingsItems = useMemo(
+    () => ratings?.pages.flatMap((page) => page.items) ?? [],
+    [ratings]
+  );
 
   // Setup observer for feed sentinel
   const setupFeedObserver = useCallback(() => {
@@ -98,18 +106,15 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
         const [entry] = entries;
         if (!entry.isIntersecting) return;
         if (!isFeed) return;
-        if (!hasMoreFeed) return;
-        if (feedIsPlaceholder || feedFetching) return;
-        if (feedLimit !== lastTriggeredFeedLimit.current) return;
-        const nextLimit = feedLimit + 20;
-        lastTriggeredFeedLimit.current = nextLimit;
-        setFeedLimit(nextLimit);
+        if (!feedHasNextPage) return;
+        if (feedFetchingNextPage) return;
+        fetchNextFeedPage();
       },
       { rootMargin: "50px", threshold: 0.01 }
     );
     feedObserverRef.current = observer;
     observer.observe(node);
-  }, [activeTab, hasMoreFeed, feedIsPlaceholder, feedFetching, feedLimit]);
+  }, [activeTab, feedHasNextPage, feedFetchingNextPage, fetchNextFeedPage]);
 
   // Recreate observers when relevant state changes and sentinel exists
   useEffect(() => {
@@ -158,7 +163,9 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     rateMovie.mutate({ userId, movieId, rating, status });
   };
 
-  const ratingsCount = ratings?.filter((r) => r.status === "watched").length ?? userSummary?.num_ratings ?? 0;
+  const ratingsCount = ratingsItems.filter((r) => r.status === "watched").length
+    || userSummary?.num_ratings
+    || 0;
   
   const gridClass = useMemo(
     () => "grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3",
@@ -201,11 +208,11 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
 
             <TabsContent value="feed" className="mt-0 focus-visible:ring-0">
               <Feed
-                feed={feed || []}
+                feed={feedItems}
                 loading={feedLoading}
                 gridClass={gridClass}
-                isFetchingMore={feedIsPlaceholder}
-                hasMore={hasMoreFeed}
+                isFetchingMore={feedFetchingNextPage}
+                hasMore={feedHasNextPage}
                 sentinelRef={setFeedSentinel}
               />
             </TabsContent>
@@ -223,9 +230,12 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
 
             <TabsContent value="ratings" className="mt-0 focus-visible:ring-0">
               <Ratings
-                ratings={ratings || []}
+                ratings={ratingsItems}
                 loading={ratingsLoading}
                 gridClass={gridClass}
+                hasMore={ratingsHasNextPage}
+                isFetchingMore={ratingsFetchingNextPage}
+                onLoadMore={fetchNextRatingsPage}
               />
             </TabsContent>
 

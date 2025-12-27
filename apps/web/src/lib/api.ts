@@ -103,6 +103,16 @@ export type UserMovieMatch = {
   score: number | null;
 };
 
+export type PaginationMeta = {
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
+export type PaginatedResponse<T> = {
+  items: T[];
+  meta: PaginationMeta;
+};
+
 type ApiSuccess<T> = {
   data: T;
   meta?: Record<string, unknown>;
@@ -129,6 +139,11 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
+  const envelope = await fetchEnvelope<T>(path, options);
+  return envelope?.data;
+}
+
+async function fetchEnvelope<T>(path: string, options?: RequestInit): Promise<ApiSuccess<T> | undefined> {
   const response = await fetch(`${API_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -163,10 +178,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
     if (payload.data === null || payload.data === undefined) {
       throw new ApiError(response.status, "Response envelope missing data", "EMPTY_DATA");
     }
-    return payload.data as T;
+    return payload;
   }
 
   throw new ApiError(response.status, "Unexpected response shape", "UNEXPECTED_RESPONSE");
+}
+
+async function requestPaginated<T>(path: string, options?: RequestInit): Promise<PaginatedResponse<T>> {
+  const envelope = await fetchEnvelope<T[]>(path, options);
+  if (!envelope) {
+    throw new ApiError(204, "Empty response payload", "EMPTY_RESPONSE");
+  }
+  if (!Array.isArray(envelope.data)) {
+    throw new ApiError(500, "Response data is not an array", "INVALID_DATA");
+  }
+  const meta = envelope.meta ?? {};
+  const next_cursor = typeof meta.next_cursor === "string" ? meta.next_cursor : null;
+  const has_more = meta.has_more === true;
+  return { items: envelope.data, meta: { next_cursor, has_more } };
 }
 
 export const api = {
@@ -178,12 +207,14 @@ export const api = {
     }),
   getUserSummary: (userId: number) => request<UserSummary>(`/users/${userId}`),
   getProfileStats: (userId: number) => request<ProfileStats>(`/users/${userId}/profile`),
-  getFeed: (userId: number, k = 20) => request<FeedItem[]>(`/users/${userId}/feed?k=${k}`),
-  getRecommendations: (userId: number, k = 20) =>
-    request<Recommendation[]>(`/users/${userId}/recommendations?k=${k}`),
-  getRatings: (userId: number, k = 20) => request<RatedMovie[]>(`/users/${userId}/ratings?k=${k}`),
-  getRatingQueue: (userId: number, k = 20) =>
-    request<RatingQueueItem[]>(`/users/${userId}/rating-queue?k=${k}`),
+  getFeed: (userId: number, k = 20, cursor?: string | null) =>
+    requestPaginated<FeedItem>(`/users/${userId}/feed${buildPaginationQuery(k, cursor)}`),
+  getRecommendations: (userId: number, k = 20, cursor?: string | null) =>
+    requestPaginated<Recommendation>(`/users/${userId}/recommendations${buildPaginationQuery(k, cursor)}`),
+  getRatings: (userId: number, k = 20, cursor?: string | null) =>
+    requestPaginated<RatedMovie>(`/users/${userId}/ratings${buildPaginationQuery(k, cursor)}`),
+  getRatingQueue: (userId: number, k = 20, cursor?: string | null) =>
+    requestPaginated<RatingQueueItem>(`/users/${userId}/rating-queue${buildPaginationQuery(k, cursor)}`),
   getNextMovie: (userId: number) => request<NextMovie>(`/users/${userId}/next`),
   getUserMovieMatch: (userId: number, movieId: number) =>
     request<UserMovieMatch>(`/users/${userId}/movies/${movieId}/match`),
@@ -194,6 +225,14 @@ export const api = {
     }),
   lookupMovie: (title: string) => request<MovieLookup>(`/movies/lookup?title=${encodeURIComponent(title)}`),
   getMovieDetail: (movieId: number) => request<MovieDetail>(`/movies/${movieId}`),
-  getSimilar: (movieId: number, k = 10) =>
-    request<SimilarMovie[]>(`/movies/${movieId}/similar?k=${k}`),
+  getSimilar: (movieId: number, k = 10, cursor?: string | null) =>
+    requestPaginated<SimilarMovie>(`/movies/${movieId}/similar${buildPaginationQuery(k, cursor)}`),
 };
+
+function buildPaginationQuery(k: number, cursor?: string | null) {
+  const params = new URLSearchParams({ k: String(k) });
+  if (cursor) {
+    params.set("cursor", cursor);
+  }
+  return `?${params.toString()}`;
+}
