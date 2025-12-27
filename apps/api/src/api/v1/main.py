@@ -167,6 +167,24 @@ class UserMovieMatchResponse(BaseModel):
     score: int | None
 
 
+def _process_rating(user_id: int, movie_id: int, rating: int | None, status: str | None):
+    if rating is None and status is None:
+        raise HTTPException(status_code=400, detail="rating or status is required")
+
+    resolved_status = status or ("watched" if rating is not None else "unwatched")
+    if resolved_status not in {"watched", "unwatched"}:
+        raise HTTPException(status_code=400, detail="status must be watched or unwatched")
+
+    resolved_rating = rating if resolved_status == "watched" else None
+    try:
+        upsert_rating(user_id, movie_id, resolved_rating, resolved_status)
+    except (UserNotFoundError, MovieNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    recompute_profile(user_id)
+    return {"status": "ok"}
+
+
 @router.get("/health")
 def health():
     return {"status": "ok"}
@@ -231,40 +249,12 @@ def get_user_profile(user_id: int):
 
 @router.put("/users/{user_id}/ratings/{movie_id}")
 def rate_movie(user_id: int, movie_id: int, payload: RatingRequest):
-    if payload.rating is None and payload.status is None:
-        raise HTTPException(status_code=400, detail="rating or status is required")
-
-    status = payload.status or ("watched" if payload.rating is not None else "unwatched")
-    if status not in {"watched", "unwatched"}:
-        raise HTTPException(status_code=400, detail="status must be watched or unwatched")
-
-    rating = payload.rating if status == "watched" else None
-    try:
-        upsert_rating(user_id, movie_id, rating, status)
-    except (UserNotFoundError, MovieNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    recompute_profile(user_id)
-    return {"status": "ok"}
+    return _process_rating(user_id, movie_id, payload.rating, payload.status)
 
 
 @router.post("/users/{user_id}/rate")
 def rate_movie_simple(user_id: int, payload: RateMovieRequest):
-    if payload.rating is None and payload.status is None:
-        raise HTTPException(status_code=400, detail="rating or status is required")
-
-    status = payload.status or ("watched" if payload.rating is not None else "unwatched")
-    if status not in {"watched", "unwatched"}:
-        raise HTTPException(status_code=400, detail="status must be watched or unwatched")
-
-    rating = payload.rating if status == "watched" else None
-    try:
-        upsert_rating(user_id, payload.movie_id, rating, status)
-    except (UserNotFoundError, MovieNotFoundError) as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    recompute_profile(user_id)
-    return {"status": "ok"}
+    return _process_rating(user_id, payload.movie_id, payload.rating, payload.status)
 
 
 @router.get("/users/{user_id}/recommendations", response_model=list[RecommendationResponse])
