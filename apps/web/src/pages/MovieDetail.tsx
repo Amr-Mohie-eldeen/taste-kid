@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
-import { useMovieDetail, useSimilarMovies, useRateMovie } from "../lib/hooks";
+import { useMovieDetail, useSimilarMovies, useRateMovie, useFeed } from "../lib/hooks";
 import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
@@ -23,6 +23,8 @@ export function MovieDetail() {
   // Queries
   const { data: detail, isLoading: movieLoading, error: movieError } = useMovieDetail(id);
   const { data: similar, isLoading: similarLoading } = useSimilarMovies(id);
+  // Backend caps k at 100; use max allowed to find match score
+  const { data: feed } = useFeed(userId, 100);
   
   // Mutations
   const rateMovie = useRateMovie();
@@ -82,7 +84,7 @@ export function MovieDetail() {
       <div className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
         <Card className="overflow-hidden">
           <CardContent className="p-6">
-            <div className="aspect-[2/3] w-full overflow-hidden rounded-2xl bg-muted">
+            <div className="relative aspect-[2/3] w-full overflow-hidden rounded-2xl bg-muted">
               {detail.poster_url || detail.backdrop_url ? (
                 <PosterImage
                   src={detail.poster_url ?? detail.backdrop_url ?? ""}
@@ -93,6 +95,16 @@ export function MovieDetail() {
                   No poster
                 </div>
               )}
+              {(() => {
+                const sim = feed?.find((f) => f.id === id)?.similarity ?? null;
+                return typeof sim === 'number' && !Number.isNaN(sim) ? (
+                  <div className="absolute right-3 top-3 z-10">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/60 text-[11px] font-bold text-white backdrop-blur-md">
+                      {Math.round(Math.min(100, Math.max(0, sim * 100)))}%
+                    </div>
+                  </div>
+                ) : null;
+              })()}
             </div>
           </CardContent>
         </Card>
