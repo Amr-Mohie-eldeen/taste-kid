@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
 import { useMovieDetail, useSimilarMovies, useRateMovie, useFeed } from "../lib/hooks";
@@ -28,15 +28,26 @@ export function MovieDetail() {
   
   // Mutations
   const rateMovie = useRateMovie();
+  const [rateError, setRateError] = useState<string | null>(null);
 
   // Poster Hydration
   usePosterHydration(similar?.map((item) => item.id));
 
   const handleRate = async (rating: number | null, status: string) => {
     if (!userId || !id) {
+      if (!userId) {
+        setRateError(null);
+      } else {
+        setRateError("Invalid movie.");
+      }
       return;
     }
-    rateMovie.mutate({ userId, movieId: id, rating, status });
+    setRateError(null);
+    try {
+      await rateMovie.mutateAsync({ userId, movieId: id, rating, status });
+    } catch (error) {
+      setRateError(error instanceof Error ? error.message : "Failed to save rating.");
+    }
   };
 
   const meta = useMemo(() => {
@@ -49,6 +60,13 @@ export function MovieDetail() {
     if (detail.original_language) list.push(detail.original_language.toUpperCase());
     return list;
   }, [detail]);
+
+  const similarityScore = useMemo(() => {
+    const sim = feed?.find((item) => item.id === id)?.similarity ?? null;
+    return typeof sim === "number" && !Number.isNaN(sim)
+      ? Math.round(Math.min(100, Math.max(0, sim * 100)))
+      : null;
+  }, [feed, id]);
 
   if (movieLoading) {
     return (
@@ -64,7 +82,7 @@ export function MovieDetail() {
     );
   }
 
-  if (movieError || (!detail && !movieLoading)) {
+  if (movieError || !detail) {
     return (
       <div>
         <EmptyState title="Unable to load" description={movieError instanceof Error ? movieError.message : "Movie not found"} />
@@ -95,16 +113,13 @@ export function MovieDetail() {
                   No poster
                 </div>
               )}
-              {(() => {
-                const sim = feed?.find((f) => f.id === id)?.similarity ?? null;
-                return typeof sim === 'number' && !Number.isNaN(sim) ? (
-                  <div className="absolute right-3 top-3 z-10">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/60 text-[11px] font-bold text-white backdrop-blur-md">
-                      {Math.round(Math.min(100, Math.max(0, sim * 100)))}%
-                    </div>
+              {similarityScore !== null && (
+                <div className="absolute right-3 top-3 z-10">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20 bg-black/60 text-[11px] font-bold text-white backdrop-blur-md">
+                    {similarityScore}%
                   </div>
-                ) : null;
-              })()}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -149,8 +164,9 @@ export function MovieDetail() {
           {!userId && (
             <p className="text-sm text-amber-600">Select a profile first on the dashboard to rate movies.</p>
           )}
+          {rateError && <p className="text-sm text-destructive">{rateError}</p>}
           {rateMovie.isSuccess && <p className="text-sm text-primary">Rating saved.</p>}
-          {rateMovie.isError && <p className="text-sm text-destructive">Failed to save rating.</p>}
+          {rateMovie.isError && !rateError && <p className="text-sm text-destructive">Failed to save rating.</p>}
         </div>
       </div>
 

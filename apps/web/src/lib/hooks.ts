@@ -48,7 +48,7 @@ export function useFeed(userId: number | null, limit: number) {
 export function useRatings(userId: number | null, limit?: number) {
   return useQuery({
     queryKey: ["ratings", userId, limit],
-    queryFn: () => api.getRatings(userId!, limit),
+    queryFn: () => api.getRatings(userId!, limit ?? 20),
     enabled: !!userId,
   });
 }
@@ -82,7 +82,6 @@ export function useRateMovie() {
       queryClient.invalidateQueries({ queryKey: ["profileStats", userId] });
       queryClient.invalidateQueries({ queryKey: ["userSummary", userId] });
       queryClient.invalidateQueries({ queryKey: ["feed", userId] });
-      queryClient.invalidateQueries({ queryKey: ["recommendations", userId] });
     },
   });
 }
