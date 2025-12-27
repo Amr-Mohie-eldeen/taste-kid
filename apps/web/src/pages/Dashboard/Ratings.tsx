@@ -7,12 +7,11 @@ import { RatedMovie } from "../../lib/api";
 
 type RatingsProps = {
   ratings: RatedMovie[];
-  posterMap: Record<number, string | null>;
   loading: boolean;
   gridClass: string;
 };
 
-export function Ratings({ ratings, posterMap, loading, gridClass }: RatingsProps) {
+export function Ratings({ ratings, loading, gridClass }: RatingsProps) {
   const watchedRatings = ratings.filter((item) => item.status === "watched");
 
   if (loading && !ratings.length) {
@@ -46,7 +45,7 @@ export function Ratings({ ratings, posterMap, loading, gridClass }: RatingsProps
               title={item.title}
               subtitle={item.updated_at ? `Synchronized ${formatDate(item.updated_at)}` : null}
               meta={[`Score: ${item.rating ?? "-"}`]}
-              imageUrl={posterMap[item.id]}
+              imageUrl={item.poster_url ?? item.backdrop_url}
               to={`/movie/${item.id}`}
             />
           ))}

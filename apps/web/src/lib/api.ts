@@ -34,6 +34,8 @@ export type SimilarMovie = {
   genres: string | null;
   distance: number;
   score: number | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
 };
 
 export type Recommendation = {
@@ -43,11 +45,15 @@ export type Recommendation = {
   genres: string | null;
   distance: number;
   similarity: number | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
 };
 
 export type RatedMovie = {
   id: number;
   title: string | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
   rating: number | null;
   status: string;
   updated_at: string | null;
@@ -58,6 +64,8 @@ export type RatingQueueItem = {
   title: string | null;
   release_date: string | null;
   genres: string | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
 };
 
 export type ProfileStats = {
@@ -74,6 +82,8 @@ export type NextMovie = {
   release_date: string | null;
   genres: string | null;
   source: string;
+  poster_url: string | null;
+  backdrop_url: string | null;
 };
 
 export type FeedItem = {
@@ -84,6 +94,8 @@ export type FeedItem = {
   distance: number | null;
   similarity: number | null;
   source: string;
+  poster_url: string | null;
+  backdrop_url: string | null;
 };
 
 export type UserMovieMatch = {

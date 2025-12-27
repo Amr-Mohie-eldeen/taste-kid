@@ -2,7 +2,6 @@ import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
 import { useMovieDetail, useSimilarMovies, useRateMovie, useUserMovieMatch } from "../lib/hooks";
-import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 import { Separator } from "../components/ui/separator";
@@ -16,7 +15,7 @@ import { formatDate } from "../lib/utils";
 export function MovieDetail() {
   const { movieId } = useParams();
   const navigate = useNavigate();
-  const { userId, posterMap } = useStore();
+  const { userId } = useStore();
   
   const id = Number(movieId);
 
@@ -28,9 +27,6 @@ export function MovieDetail() {
   // Mutations
   const rateMovie = useRateMovie();
   const [rateError, setRateError] = useState<string | null>(null);
-
-  // Poster Hydration
-  usePosterHydration(similar?.map((item) => item.id));
 
   const handleRate = async (rating: number | null, status: string) => {
     if (!userId || !id) {
@@ -183,7 +179,7 @@ export function MovieDetail() {
                 title={item.title}
                 releaseDateLabel={item.release_date ? formatDate(item.release_date) : null}
                 genres={item.genres}
-                imageUrl={posterMap[item.id]}
+                imageUrl={item.poster_url ?? item.backdrop_url}
                 to={`/movie/${item.id}`}
                 similarity={item.score}
               />

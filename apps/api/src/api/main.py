@@ -41,6 +41,21 @@ app.add_middleware(
 )
 
 
+def _build_image_urls(poster_path: str | None, backdrop_path: str | None) -> tuple[str | None, str | None]:
+    poster_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_POSTER_SIZE}{poster_path}" if poster_path else None
+    backdrop_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_BACKDROP_SIZE}{backdrop_path}" if backdrop_path else None
+    return poster_url, backdrop_url
+
+
+def _with_image_urls(item) -> dict:
+    poster_url, backdrop_url = _build_image_urls(item.poster_path, item.backdrop_path)
+    return item.__dict__ | {"poster_url": poster_url, "backdrop_url": backdrop_url}
+
+
+def _map_with_image_urls(items, response_cls):
+    return [response_cls(**_with_image_urls(item)) for item in items]
+
+
 class SimilarMovie(BaseModel):
     id: int
     title: str | None
@@ -48,6 +63,8 @@ class SimilarMovie(BaseModel):
     genres: str | None
     distance: float
     score: float | None
+    poster_url: str | None = None
+    backdrop_url: str | None = None
 
 
 class MovieLookup(BaseModel):
@@ -102,6 +119,8 @@ class RecommendationResponse(BaseModel):
     genres: str | None
     distance: float
     similarity: float | None
+    poster_url: str | None = None
+    backdrop_url: str | None = None
 
 
 class RatingQueueResponse(BaseModel):
@@ -109,11 +128,15 @@ class RatingQueueResponse(BaseModel):
     title: str | None
     release_date: date | None
     genres: str | None
+    poster_url: str | None = None
+    backdrop_url: str | None = None
 
 
 class RatedMovieResponse(BaseModel):
     id: int
     title: str | None
+    poster_url: str | None = None
+    backdrop_url: str | None = None
     rating: int | None
     status: str
     updated_at: str | None
@@ -133,6 +156,8 @@ class NextMovieResponse(BaseModel):
     release_date: date | None
     genres: str | None
     source: str
+    poster_url: str | None = None
+    backdrop_url: str | None = None
 
 
 class FeedItemResponse(BaseModel):
@@ -143,6 +168,8 @@ class FeedItemResponse(BaseModel):
     distance: float | None
     similarity: float | None
     source: str
+    poster_url: str | None = None
+    backdrop_url: str | None = None
 
 
 class UserMovieMatchResponse(BaseModel):
@@ -174,17 +201,7 @@ def similar_movies(movie_id: int, k: int | None = Query(default=None, ge=1, le=1
         for candidate in ranked:
             candidate.score = None
 
-    return [
-        SimilarMovie(
-            id=candidate.id,
-            title=candidate.title,
-            release_date=candidate.release_date,
-            genres=candidate.genres,
-            distance=candidate.distance,
-            score=candidate.score,
-        )
-        for candidate in ranked
-    ]
+    return _map_with_image_urls(ranked, SimilarMovie)
 
 
 @app.get("/movies/lookup", response_model=MovieLookup)
@@ -200,12 +217,7 @@ def movie_detail(movie_id: int):
     movie = fetch_movie_detail(movie_id)
     if not movie:
         raise HTTPException(status_code=404, detail="Movie not found")
-    poster_url = None
-    backdrop_url = None
-    if movie.poster_path:
-        poster_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_POSTER_SIZE}{movie.poster_path}"
-    if movie.backdrop_path:
-        backdrop_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_BACKDROP_SIZE}{movie.backdrop_path}"
+    poster_url, backdrop_url = _build_image_urls(movie.poster_path, movie.backdrop_path)
     payload = movie.__dict__ | {"poster_url": poster_url, "backdrop_url": backdrop_url}
     return MovieDetailResponse(**payload)
 
@@ -270,7 +282,7 @@ def user_recommendations(user_id: int, k: int = Query(default=20, ge=1, le=100))
         recs = get_recommendations(user_id, k)
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [RecommendationResponse(**rec.__dict__) for rec in recs]
+    return _map_with_image_urls(recs, RecommendationResponse)
 
 
 @app.get("/users/{user_id}/rating-queue", response_model=list[RatingQueueResponse])
@@ -279,7 +291,7 @@ def rating_queue(user_id: int, k: int = Query(default=20, ge=1, le=100)):
         queue = get_rating_queue(user_id, k)
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [RatingQueueResponse(**item.__dict__) for item in queue]
+    return _map_with_image_urls(queue, RatingQueueResponse)
 
 
 @app.get("/users/{user_id}/ratings", response_model=list[RatedMovieResponse])
@@ -288,7 +300,7 @@ def user_ratings(user_id: int, k: int = Query(default=20, ge=1, le=100)):
         ratings = get_user_ratings(user_id, k)
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [RatedMovieResponse(**item.__dict__) for item in ratings]
+    return _map_with_image_urls(ratings, RatedMovieResponse)
 
 
 @app.get("/users/{user_id}/profile", response_model=ProfileStatsResponse)
@@ -308,7 +320,7 @@ def next_movie(user_id: int):
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     if movie is None:
         raise HTTPException(status_code=404, detail="No more unrated movies")
-    return NextMovieResponse(**movie.__dict__)
+    return NextMovieResponse(**_with_image_urls(movie))
 
 
 @app.get("/users/{user_id}/feed", response_model=list[FeedItemResponse])
@@ -317,7 +329,7 @@ def user_feed(user_id: int, k: int = Query(default=20, ge=1, le=100)):
         items = get_feed(user_id, k)
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-    return [FeedItemResponse(**item.__dict__) for item in items]
+    return _map_with_image_urls(items, FeedItemResponse)
 
 
 @app.get("/users/{user_id}/movies/{movie_id}/match", response_model=UserMovieMatchResponse)

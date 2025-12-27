@@ -14,13 +14,12 @@ import { Layers } from "lucide-react";
 type RateProps = {
   nextMovie: NextMovie | null;
   ratingQueue: RatingQueueItem[];
-  posterMap: Record<number, string | null>;
   loading: boolean;
   onRateMovie: (movieId: number, rating: number | null, status: string) => void;
 };
 
-export function Rate({ nextMovie, ratingQueue, posterMap, loading, onRateMovie }: RateProps) {
-  const nextPoster = nextMovie ? posterMap[nextMovie.id] : null;
+export function Rate({ nextMovie, ratingQueue, loading, onRateMovie }: RateProps) {
+  const nextPoster = nextMovie ? nextMovie.poster_url ?? nextMovie.backdrop_url : null;
 
   return (
     <div className="space-y-10">
@@ -96,9 +95,9 @@ export function Rate({ nextMovie, ratingQueue, posterMap, loading, onRateMovie }
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {ratingQueue.slice(0, 6).map((item) => (
               <div key={item.id} className="group relative aspect-[16/9] overflow-hidden rounded-2xl border border-border/40 bg-muted/30">
-                {posterMap[item.id] ? (
+                {item.poster_url || item.backdrop_url ? (
                   <PosterImage
-                    src={posterMap[item.id] ?? ""}
+                    src={item.poster_url ?? item.backdrop_url ?? ""}
                     alt={item.title ?? "Movie"}
                     className="opacity-60 transition-all duration-500 group-hover:scale-110 group-hover:opacity-100"
                   />

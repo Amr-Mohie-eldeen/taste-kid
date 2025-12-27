@@ -25,6 +25,8 @@ class MovieMetadata:
     original_language: str | None
     vote_count: int | None
     vote_average: float | None
+    poster_path: str | None
+    backdrop_path: str | None
 
 
 @dataclass
@@ -45,7 +47,9 @@ def fetch_movie_metadata(movie_id: int) -> MovieMetadata | None:
                runtime,
                original_language,
                vote_count,
-               vote_average
+               vote_average,
+               poster_path,
+               backdrop_path
         FROM movies
         WHERE id = :movie_id
         """
@@ -70,7 +74,9 @@ def find_movie_id_by_title(title: str) -> MovieMetadata | None:
                runtime,
                original_language,
                vote_count,
-               vote_average
+               vote_average,
+               poster_path,
+               backdrop_path
         FROM movies
         WHERE lower(title) = lower(:title)
            OR lower(original_title) = lower(:title)
@@ -121,6 +127,8 @@ def get_similar_candidates(movie_id: int, k: int = 200) -> list[Candidate]:
                m.original_language,
                m.vote_count,
                m.vote_average,
+               m.poster_path,
+               m.backdrop_path,
                (e.embedding <=> q.embedding) AS distance
         FROM movie_embeddings e
         JOIN movies m ON m.id = e.movie_id

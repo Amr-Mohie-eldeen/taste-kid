@@ -16,7 +16,6 @@ type SearchProps = {
   searchError: string | null;
   searchedMovie: MovieDetail | null;
   similarMovies: SimilarMovie[];
-  posterMap: Record<number, string | null>;
   gridClass: string;
 };
 
@@ -26,7 +25,6 @@ export function Search({
   searchError,
   searchedMovie,
   similarMovies,
-  posterMap,
   gridClass,
 }: SearchProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -119,7 +117,7 @@ export function Search({
                     title={item.title}
                     releaseDateLabel={item.release_date ? formatDate(item.release_date) : null}
                     genres={item.genres}
-                    imageUrl={posterMap[item.id]}
+                    imageUrl={item.poster_url ?? item.backdrop_url}
                     to={`/movie/${item.id}`}
                     similarity={item.score}
                   />
