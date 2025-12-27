@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useStore } from "../lib/store";
-import { useMovieDetail, useSimilarMovies, useRateMovie, useFeed } from "../lib/hooks";
+import { useMovieDetail, useSimilarMovies, useRateMovie, useUserMovieMatch } from "../lib/hooks";
 import { usePosterHydration } from "../lib/usePosterHydration";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
@@ -23,8 +23,7 @@ export function MovieDetail() {
   // Queries
   const { data: detail, isLoading: movieLoading, error: movieError } = useMovieDetail(id);
   const { data: similar, isLoading: similarLoading } = useSimilarMovies(id);
-  // Backend caps k at 100; use max allowed to find match score
-  const { data: feed } = useFeed(userId, 100);
+  const { data: match } = useUserMovieMatch(userId, Number.isNaN(id) ? null : id);
   
   // Mutations
   const rateMovie = useRateMovie();
@@ -62,11 +61,11 @@ export function MovieDetail() {
   }, [detail]);
 
   const similarityScore = useMemo(() => {
-    const sim = feed?.find((item) => item.id === id)?.similarity ?? null;
-    return typeof sim === "number" && !Number.isNaN(sim)
-      ? Math.round(Math.min(100, Math.max(0, sim * 100)))
+    const score = match?.score ?? null;
+    return typeof score === "number" && !Number.isNaN(score)
+      ? Math.round(Math.min(100, Math.max(0, score)))
       : null;
-  }, [feed, id]);
+  }, [match]);
 
   if (movieLoading) {
     return (

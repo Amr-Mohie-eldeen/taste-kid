@@ -86,6 +86,10 @@ export type FeedItem = {
   source: string;
 };
 
+export type UserMovieMatch = {
+  score: number | null;
+};
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -128,6 +132,8 @@ export const api = {
   getRatingQueue: (userId: number, k = 20) =>
     request<RatingQueueItem[]>(`/users/${userId}/rating-queue?k=${k}`),
   getNextMovie: (userId: number) => request<NextMovie>(`/users/${userId}/next`),
+  getUserMovieMatch: (userId: number, movieId: number) =>
+    request<UserMovieMatch>(`/users/${userId}/movies/${movieId}/match`),
   rateMovie: (userId: number, movieId: number, rating: number | null, status: string) =>
     request<{ status: string }>(`/users/${userId}/ratings/${movieId}`, {
       method: "PUT",

@@ -73,6 +73,11 @@ class FeedItem:
 
 
 @dataclass
+class UserMovieMatch:
+    score: int | None
+
+
+@dataclass
 class RatedMovie:
     id: int
     title: str | None
@@ -429,6 +434,28 @@ def get_feed(user_id: int, limit: int) -> list[FeedItem]:
         )
         for item in queue
     ]
+
+
+def get_user_movie_match(user_id: int, movie_id: int) -> UserMovieMatch:
+    _ensure_user(user_id)
+    _ensure_movie(movie_id)
+    engine = get_engine()
+    q = text(
+        """
+        SELECT (e.embedding <=> p.embedding) AS distance
+        FROM user_profiles p
+        LEFT JOIN movie_embeddings e ON e.movie_id = :movie_id
+        WHERE p.user_id = :user_id
+        """
+    )
+    with engine.begin() as conn:
+        row = conn.execute(q, {"user_id": user_id, "movie_id": movie_id}).first()
+    if not row or row[0] is None:
+        return UserMovieMatch(score=None)
+    distance = float(row[0])
+    similarity = 1.0 - distance
+    score = round(min(100, max(0, similarity * 100)))
+    return UserMovieMatch(score=score)
 
 
 def get_user_ratings(user_id: int, limit: int) -> list[RatedMovie]:

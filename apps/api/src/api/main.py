@@ -24,6 +24,7 @@ from api.users import (
     get_profile_stats,
     get_next_movie,
     get_feed,
+    get_user_movie_match,
     get_user_summary,
     recompute_profile,
     upsert_rating,
@@ -142,6 +143,10 @@ class FeedItemResponse(BaseModel):
     distance: float | None
     similarity: float | None
     source: str
+
+
+class UserMovieMatchResponse(BaseModel):
+    score: int | None
 
 
 @app.get("/health")
@@ -313,3 +318,12 @@ def user_feed(user_id: int, k: int = Query(default=20, ge=1, le=100)):
     except UserNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     return [FeedItemResponse(**item.__dict__) for item in items]
+
+
+@app.get("/users/{user_id}/movies/{movie_id}/match", response_model=UserMovieMatchResponse)
+def user_movie_match(user_id: int, movie_id: int):
+    try:
+        match = get_user_movie_match(user_id, movie_id)
+    except (UserNotFoundError, MovieNotFoundError) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return UserMovieMatchResponse(**match.__dict__)

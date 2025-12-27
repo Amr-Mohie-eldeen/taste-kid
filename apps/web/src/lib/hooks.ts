@@ -75,13 +75,14 @@ export function useRateMovie() {
   return useMutation({
     mutationFn: ({ userId, movieId, rating, status }: { userId: number; movieId: number; rating: number | null; status: string }) =>
       api.rateMovie(userId, movieId, rating, status),
-    onSuccess: (_, { userId }) => {
+    onSuccess: (_, { userId, movieId }) => {
       queryClient.invalidateQueries({ queryKey: ["ratingQueue", userId] });
       queryClient.invalidateQueries({ queryKey: ["nextMovie", userId] });
       queryClient.invalidateQueries({ queryKey: ["ratings", userId] });
       queryClient.invalidateQueries({ queryKey: ["profileStats", userId] });
       queryClient.invalidateQueries({ queryKey: ["userSummary", userId] });
       queryClient.invalidateQueries({ queryKey: ["feed", userId] });
+      queryClient.invalidateQueries({ queryKey: ["userMovieMatch", userId, movieId] });
     },
   });
 }
@@ -116,6 +117,14 @@ export function useSimilarMovies(movieId: number) {
 
   });
 
+}
+
+export function useUserMovieMatch(userId: number | null, movieId: number | null) {
+  return useQuery({
+    queryKey: ["userMovieMatch", userId, movieId],
+    queryFn: () => api.getUserMovieMatch(userId!, movieId!),
+    enabled: !!userId && !!movieId && !Number.isNaN(movieId),
+  });
 }
 
 
