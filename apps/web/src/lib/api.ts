@@ -128,7 +128,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit): Promise<T | undefined> {
   const response = await fetch(`${API_URL}${path}`, {
     headers: { "Content-Type": "application/json" },
     ...options,
@@ -152,14 +152,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   if (response.status === 204) {
-    return null as T;
+    return undefined;
   }
 
-  if (payload && "data" in payload) {
+  if (!payload) {
+    throw new ApiError(response.status, "Empty response payload");
+  }
+
+  if ("data" in payload) {
+    if (payload.data === null || payload.data === undefined) {
+      throw new ApiError(response.status, "Response envelope missing data", "EMPTY_DATA");
+    }
     return payload.data as T;
   }
 
-  return payload as T;
+  throw new ApiError(response.status, "Unexpected response shape", "UNEXPECTED_RESPONSE");
 }
 
 export const api = {

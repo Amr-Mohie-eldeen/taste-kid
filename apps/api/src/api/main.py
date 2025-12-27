@@ -31,6 +31,16 @@ def _error_response(status_code: int, code: str, message: str, details: object |
     return JSONResponse(status_code=status_code, content=_error_payload(code, message, details))
 
 
+_STATUS_CODE_MAP = {
+    status.HTTP_400_BAD_REQUEST: "BAD_REQUEST",
+    status.HTTP_401_UNAUTHORIZED: "UNAUTHORIZED",
+    status.HTTP_403_FORBIDDEN: "FORBIDDEN",
+    status.HTTP_404_NOT_FOUND: "NOT_FOUND",
+    status.HTTP_409_CONFLICT: "CONFLICT",
+    status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+}
+
+
 @app.exception_handler(HTTPException)
 async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONResponse:
     if isinstance(exc.detail, str):
@@ -39,7 +49,8 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
     else:
         message = "Request failed"
         details = exc.detail
-    return _error_response(exc.status_code, "HTTP_ERROR", message, details)
+    code = _STATUS_CODE_MAP.get(exc.status_code, "HTTP_ERROR")
+    return _error_response(exc.status_code, code, message, details)
 
 
 @app.exception_handler(RequestValidationError)
@@ -65,5 +76,17 @@ async def movie_not_found_handler(_request: Request, exc: MovieNotFoundError) ->
 @app.exception_handler(EmbeddingNotFoundError)
 async def embedding_not_found_handler(_request: Request, exc: EmbeddingNotFoundError) -> JSONResponse:
     return _error_response(status.HTTP_404_NOT_FOUND, "EMBEDDING_NOT_FOUND", str(exc))
+
+
+@app.exception_handler(Exception)
+async def generic_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
+    import logging
+
+    logging.exception("Unhandled exception", exc_info=exc)
+    return _error_response(
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
+        "INTERNAL_ERROR",
+        "An unexpected error occurred",
+    )
 
 app.include_router(v1_router, prefix="/v1")

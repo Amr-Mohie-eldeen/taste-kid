@@ -52,8 +52,8 @@ def _map_with_image_urls(items, response_cls):
     return [response_cls(**_with_image_urls(item)) for item in items]
 
 
-def _envelope(data, meta: dict[str, Any] | None = None) -> dict[str, Any]:
-    return {"data": data, "meta": meta or {}}
+def _envelope(data: ResponseData, meta: dict[str, Any] | None = None) -> ResponseEnvelope[ResponseData]:
+    return ResponseEnvelope(data=data, meta=meta or {})
 
 
 class SimilarMovie(BaseModel):
