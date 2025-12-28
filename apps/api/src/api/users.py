@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 
@@ -7,6 +8,8 @@ from sqlalchemy import text
 
 from api.config import USER_UNWATCHED_COOLDOWN_DAYS
 from api.db import get_engine
+from api.rerank.features import extract_year, parse_genres, parse_keywords, style_keywords
+from api.rerank.scorer import ScoringContext, rerank_candidates
 
 
 class UserNotFoundError(LookupError):
@@ -31,10 +34,15 @@ class Recommendation:
     title: str | None
     release_date: date | None
     genres: str | None
+    keywords: str | None
+    runtime: int | None
+    original_language: str | None
+    vote_count: int | None
     poster_path: str | None
     backdrop_path: str | None
     distance: float
     similarity: float | None = None
+    score: float | None = None
 
 
 @dataclass
@@ -77,6 +85,7 @@ class FeedItem:
     backdrop_path: str | None
     distance: float | None
     similarity: float | None
+    score: float | None
     source: str
 
 
@@ -259,6 +268,64 @@ def recompute_profile(user_id: int) -> None:
         )
 
 
+def _build_user_scoring_context(user_id: int) -> ScoringContext | None:
+    engine = get_engine()
+    q = text(
+        """
+        SELECT m.genres, m.keywords, m.runtime, m.release_date, m.original_language
+        FROM user_movie_ratings r
+        JOIN movies m ON m.id = r.movie_id
+        WHERE r.user_id = :user_id
+          AND r.status = 'watched'
+          AND r.rating >= 4
+        ORDER BY r.updated_at DESC
+        LIMIT 20
+        """
+    )
+    with engine.begin() as conn:
+        rows = conn.execute(q, {"user_id": user_id}).mappings().all()
+
+    if not rows:
+        return None
+
+    all_genres = []
+    all_keywords = []
+    runtimes = []
+    years = []
+    languages = []
+
+    for row in rows:
+        if row["genres"]:
+            all_genres.extend([g.strip().lower() for g in row["genres"].split(",") if g.strip()])
+        if row["keywords"]:
+            all_keywords.extend([k.strip().lower() for k in row["keywords"].split(",") if k.strip()])
+        if row["runtime"]:
+            runtimes.append(row["runtime"])
+
+        y = extract_year(row["release_date"])
+        if y:
+            years.append(y)
+        if row["original_language"]:
+            languages.append(row["original_language"].lower())
+
+    top_genres = {g for g, _ in Counter(all_genres).most_common(5)}
+    # Use more keywords for context to catch nuances
+    top_keywords = {k for k, _ in Counter(all_keywords).most_common(20)}
+
+    avg_runtime = int(sum(runtimes) / len(runtimes)) if runtimes else None
+    avg_year = int(sum(years) / len(years)) if years else None
+    fav_lang = Counter(languages).most_common(1)[0][0] if languages else None
+
+    return ScoringContext(
+        genres=top_genres,
+        keywords=top_keywords,
+        style=style_keywords(top_keywords),
+        runtime=avg_runtime,
+        year=avg_year,
+        language=fav_lang,
+    )
+
+
 def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
     _ensure_user(user_id)
     engine = get_engine()
@@ -269,12 +336,20 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
         return []
 
     embedding = profile[0]
+    
+    # Fetch more candidates for re-ranking
+    fetch_limit = limit * 5
+    
     q = text(
         """
         SELECT m.id,
                m.title,
                m.release_date,
                m.genres,
+               m.keywords,
+               m.runtime,
+               m.original_language,
+               m.vote_count,
                m.poster_path,
                m.backdrop_path,
                (e.embedding <=> :embedding) AS distance
@@ -296,12 +371,21 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
             {
                 "user_id": user_id,
                 "embedding": embedding,
-                "limit": limit,
+                "limit": fetch_limit,
                 "offset": offset,
                 "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
             },
         ).mappings().all()
-    results = [Recommendation(**row) for row in rows]
+    
+    candidates = [Recommendation(**row) for row in rows]
+
+    user_ctx = _build_user_scoring_context(user_id)
+    if user_ctx:
+        # Pass None as anchor because we provide anchor_context directly
+        results = rerank_candidates(None, candidates, limit, anchor_context=user_ctx)
+    else:
+        results = candidates[:limit]
+
     for item in results:
         item.similarity = 1.0 - item.distance
     return results
@@ -440,6 +524,7 @@ def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
                 backdrop_path=item.backdrop_path,
                 distance=item.distance,
                 similarity=item.similarity,
+                score=item.score,
                 source="profile",
             )
             for item in recs
@@ -456,6 +541,7 @@ def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
             backdrop_path=item.backdrop_path,
             distance=None,
             similarity=None,
+            score=None,
             source="popularity",
         )
         for item in queue
