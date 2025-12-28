@@ -1,8 +1,10 @@
 import json
 import logging
 import logging.config
-from api.config import LOG_LEVEL
 from datetime import datetime, timezone
+
+from api.config import LOG_LEVEL
+from api.logging_context import request_id_ctx
 
 
 class JsonFormatter(logging.Formatter):
@@ -14,20 +16,35 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
 
-        for key in (
-            "method",
-            "path",
-            "status_code",
-            "duration_ms",
-            "request_id",
-            "client",
-            "statement",
-            "executemany",
-            "slow",
-            "sampled",
-        ):
-            value = getattr(record, key, None)
-            if value is not None:
+        request_id = request_id_ctx.get()
+        if request_id:
+            payload["request_id"] = request_id
+
+        excluded = {
+            "name",
+            "msg",
+            "args",
+            "created",
+            "filename",
+            "funcName",
+            "levelname",
+            "levelno",
+            "lineno",
+            "module",
+            "msecs",
+            "message",
+            "pathname",
+            "process",
+            "processName",
+            "relativeCreated",
+            "thread",
+            "threadName",
+            "exc_info",
+            "exc_text",
+            "stack_info",
+        }
+        for key, value in record.__dict__.items():
+            if key not in excluded and value is not None:
                 payload[key] = value
 
         if record.exc_info:
@@ -38,6 +55,9 @@ class JsonFormatter(logging.Formatter):
 
 def configure_logging() -> None:
     level = LOG_LEVEL.upper()
+    valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    if level not in valid_levels:
+        raise ValueError(f"Invalid LOG_LEVEL: {level}. Must be one of {sorted(valid_levels)}")
     logging.config.dictConfig(
         {
             "version": 1,

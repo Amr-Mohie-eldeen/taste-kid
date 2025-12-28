@@ -33,6 +33,7 @@ def get_engine() -> Engine:
             if start is None:
                 return
             duration_ms = (time.perf_counter() - start) * 1000
+            # LOG_DB_SLOW_QUERY_MS <= 0 logs all queries.
             if LOG_DB_SLOW_QUERY_MS <= 0 or duration_ms >= LOG_DB_SLOW_QUERY_MS:
                 _logger.info(
                     "db_query",

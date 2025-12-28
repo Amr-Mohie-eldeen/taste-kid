@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from starlette import status
 
 from api.config import FRONTEND_ORIGINS, LOG_REQUEST_SAMPLE_RATE, LOG_SLOW_REQUEST_MS
+from api.logging_context import request_id_ctx
 from api.logging_config import configure_logging
 from api.similarity import EmbeddingNotFoundError
 from api.users import MovieNotFoundError, UserNotFoundError
@@ -32,6 +33,7 @@ app.add_middleware(
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request_id_ctx.set(request_id)
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
