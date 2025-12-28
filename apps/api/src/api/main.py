@@ -1,13 +1,23 @@
+import logging
+import random
+import time
+import uuid
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette import status
 
-from api.config import FRONTEND_ORIGINS
+from api.config import FRONTEND_ORIGINS, LOG_REQUEST_SAMPLE_RATE, LOG_SLOW_REQUEST_MS
+from api.logging_context import request_id_ctx
+from api.logging_config import configure_logging
 from api.similarity import EmbeddingNotFoundError
 from api.users import MovieNotFoundError, UserNotFoundError
 from api.v1.main import router as v1_router
+
+configure_logging()
+logger = logging.getLogger("api")
 
 app = FastAPI(title="TMDB RecSys API")
 
@@ -18,6 +28,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request_id_ctx.set(request_id)
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    log_payload = {
+        "method": request.method,
+        "path": request.url.path,
+        "status_code": response.status_code,
+        "duration_ms": round(duration_ms, 2),
+        "request_id": request_id,
+        "client": request.client.host if request.client else None,
+    }
+    if duration_ms >= LOG_SLOW_REQUEST_MS:
+        logger.info("request_complete", extra=log_payload | {"slow": True})
+    elif LOG_REQUEST_SAMPLE_RATE > 0 and random.random() < LOG_REQUEST_SAMPLE_RATE:
+        logger.info("request_complete", extra=log_payload | {"sampled": True})
+    else:
+        logger.debug("request_complete", extra=log_payload)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 
 def _error_payload(code: str, message: str, details: object | None = None) -> dict:
@@ -80,9 +115,7 @@ async def embedding_not_found_handler(_request: Request, exc: EmbeddingNotFoundE
 
 @app.exception_handler(Exception)
 async def generic_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
-    import logging
-
-    logging.exception("Unhandled exception", exc_info=exc)
+    logger.exception("Unhandled exception", exc_info=exc)
     return _error_response(
         status.HTTP_500_INTERNAL_SERVER_ERROR,
         "INTERNAL_ERROR",
