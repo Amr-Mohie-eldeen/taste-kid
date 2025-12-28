@@ -88,15 +88,18 @@ def score_candidate(
     )
 
 
-def rerank_candidates(anchor, candidates, top_n: int):
+def rerank_candidates(anchor, candidates, top_n: int, anchor_context: ScoringContext | None = None):
     max_vote_count = max((c.vote_count or 0) for c in candidates) if candidates else 0
-    anchor_ctx = build_context(
-        anchor.genres,
-        anchor.keywords,
-        anchor.runtime,
-        anchor.release_date,
-        anchor.original_language,
-    )
+    if anchor_context:
+        anchor_ctx = anchor_context
+    else:
+        anchor_ctx = build_context(
+            anchor.genres,
+            anchor.keywords,
+            anchor.runtime,
+            anchor.release_date,
+            anchor.original_language,
+        )
 
     for candidate in candidates:
         candidate_ctx = build_context(

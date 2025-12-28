@@ -126,6 +126,7 @@ class RecommendationResponse(BaseModel):
     genres: str | None
     distance: float
     similarity: float | None
+    score: float | None = None
     poster_url: str | None = None
     backdrop_url: str | None = None
 
@@ -174,6 +175,7 @@ class FeedItemResponse(BaseModel):
     genres: str | None
     distance: float | None
     similarity: float | None
+    score: float | None = None
     source: str
     poster_url: str | None = None
     backdrop_url: str | None = None
