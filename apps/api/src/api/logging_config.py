@@ -7,6 +7,12 @@ from api.config import LOG_LEVEL
 from api.logging_context import request_id_ctx
 
 
+def _json_safe(obj):
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    return str(obj)
+
+
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
@@ -50,7 +56,7 @@ class JsonFormatter(logging.Formatter):
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
 
-        return json.dumps(payload)
+        return json.dumps(payload, default=_json_safe)
 
 
 def configure_logging() -> None:
