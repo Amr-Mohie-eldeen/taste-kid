@@ -24,3 +24,7 @@ FRONTEND_ORIGINS = [
     ).split(",")
     if origin.strip()
 ]
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_REQUEST_SAMPLE_RATE = float(os.getenv("LOG_REQUEST_SAMPLE_RATE", "0.1"))
+LOG_SLOW_REQUEST_MS = float(os.getenv("LOG_SLOW_REQUEST_MS", "500"))
+LOG_DB_SLOW_QUERY_MS = float(os.getenv("LOG_DB_SLOW_QUERY_MS", "250"))
