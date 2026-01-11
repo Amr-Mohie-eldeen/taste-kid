@@ -57,6 +57,7 @@ Use the notes below when making changes in this repo.
 - Require pull requests for non-doc changes; docs-only updates can merge directly if needed.
 - Keep PRs scoped and include context, screenshots, or API examples when relevant.
 - Follow existing commit style: `<type>: <summary>` (e.g. `docs: update README`, `chore: add logging`).
+- Use `make git-sync` to update `main` and prune local branches whose upstreams were deleted.
 
 ## Code Style Guidelines
 

@@ -87,38 +87,39 @@ sequenceDiagram
 
 ## Recommendations + Feed
 
-- **Recommendations**: top‑N by similarity to user profile embedding.
-- **Feed**: if user has a profile, same as recommendations; otherwise falls back to popularity‑based queue.
+- **Recommendations**: two-stage flow—vector retrieval against the user profile embedding, then dislike-aware heuristic reranking (returns optional `score`).
+- **Feed**: uses recommendations when a profile exists; otherwise falls back to the popularity-based queue (`score` is `null`).
 
 ### User Embedding + Rating Effects
 
 Ratings update the user profile embedding immediately.
 
-- **Input set**: only `status = watched` with `rating >= 4` (liked movies).
-- **Weighting**: each movie embedding is weighted by `rating / 5.0`.
-- **Aggregation**: weighted average of liked embeddings = user profile vector.
-- **Empty profile**: if no liked embeddings exist, the profile row is deleted.
+- **Profile input**: `status = watched` with `rating >= 3`.
+- **Profile weighting**: rating 5 → `1.0`, 4 → `0.8`, 3 → `NEUTRAL_RATING_WEIGHT` (default `0.2`).
+- **Dislike input**: ratings `<= 2` build a separate dislike embedding/context used only for reranking.
+- **Rerank penalty**: when at least `DISLIKE_MIN_COUNT` dislikes exist, candidates use `score = like_score - DISLIKE_WEIGHT * dislike_score`.
+- **Aggregation**: weighted average of profile embeddings = user profile vector; empty profiles delete the row.
 
-Changing a rating from `>= 4` to `< 4`, or marking a movie as `unwatched`, removes it from the profile on the next recompute.
+Changing a rating from `>= 3` to `< 3`, or marking a movie as `unwatched`, removes it from the profile on the next recompute.
 
 #### Worked Example (Weighted Average)
 
-Assume 3 liked movies with 3‑dim embeddings (toy example for intuition):
+Assume 3 watched movies with 3‑dim embeddings (toy example for intuition):
 
 - Movie A embedding = `[0.2, 0.6, 0.0]`, rating = 5 → weight = `1.0`
 - Movie B embedding = `[0.4, 0.4, 0.2]`, rating = 4 → weight = `0.8`
-- Movie C embedding = `[0.9, 0.1, 0.0]`, rating = 2 → **excluded** (rating < 4)
+- Movie C embedding = `[0.9, 0.1, 0.0]`, rating = 3 → weight = `0.2` (neutral)
 
-Weighted sum = `1.0*[0.2, 0.6, 0.0] + 0.8*[0.4, 0.4, 0.2]`
-= `[0.2 + 0.32, 0.6 + 0.32, 0.0 + 0.16]`
-= `[0.52, 0.92, 0.16]`
+Weighted sum = `1.0*[0.2, 0.6, 0.0] + 0.8*[0.4, 0.4, 0.2] + 0.2*[0.9, 0.1, 0.0]`
+= `[0.2 + 0.32 + 0.18, 0.6 + 0.32 + 0.02, 0.0 + 0.16 + 0.0]`
+= `[0.7, 0.94, 0.16]`
 
-Total weight = `1.0 + 0.8 = 1.8`
+Total weight = `1.0 + 0.8 + 0.2 = 2.0`
 
-User profile embedding = `[0.52/1.8, 0.92/1.8, 0.16/1.8]`
-= `[0.289, 0.511, 0.089]`
+User profile embedding = `[0.7/2.0, 0.94/2.0, 0.16/2.0]`
+= `[0.35, 0.47, 0.08]`
 
-That profile vector is then used for kNN search against `movie_embeddings`.
+That profile vector is then used for kNN search against `movie_embeddings`. Ratings `<= 2` are excluded from the profile and used only for dislike-aware reranking.
 
 ### Recommendation Flow
 
@@ -130,7 +131,7 @@ sequenceDiagram
 
     Client->>API: PUT /v1/users/{id}/ratings/{movie_id}
     API->>DB: Upsert rating (watched/unwatched)
-    API->>DB: Fetch liked embeddings (rating >= 4)
+    API->>DB: Fetch profile embeddings (rating >= 3)
     API->>DB: Compute weighted average
     API->>DB: Upsert user_profiles embedding
     API-->>Client: {"status": "ok"}
@@ -138,11 +139,25 @@ sequenceDiagram
     Client->>API: GET /v1/users/{id}/recommendations
     API->>DB: Load user_profiles.embedding
     DB-->>API: embedding vector
-    API->>DB: kNN search in movie_embeddings
+    API->>DB: kNN search in movie_embeddings (limit * RERANK_FETCH_MULTIPLIER)
     API->>DB: Filter out recently rated/unwatched
     DB-->>API: ordered candidates (distance)
-    API-->>Client: list of recommendations
+    API->>DB: Fetch recent ratings for like/dislike context
+    API->>API: Build scoring contexts + dislike embedding
+    API->>API: Score + rerank candidates
+    API-->>Client: list of recommendations (optional score)
 ```
+
+### Recommendation tuning settings
+
+- `DISLIKE_WEIGHT`: penalty strength applied to dislike scores.
+- `DISLIKE_MIN_COUNT`: minimum disliked ratings required before applying dislike rerank.
+- `NEUTRAL_RATING_WEIGHT`: weight for 3★ ratings in the profile (default `0.2`).
+- `SCORING_CONTEXT_LIMIT`: number of recent ratings used to build contexts.
+- `RERANK_FETCH_MULTIPLIER`: candidate expansion factor for reranking.
+- `MAX_FETCH_CANDIDATES`: cap on total fetched candidates after expansion.
+- `MAX_SCORING_GENRES`: number of genres kept in scoring context.
+- `MAX_SCORING_KEYWORDS`: number of keywords kept in scoring context.
 
 ## Endpoints (All Under `/v1`)
 

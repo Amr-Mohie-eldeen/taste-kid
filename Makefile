@@ -1,4 +1,4 @@
-.PHONY: help setup env up build down restart logs logs-api logs-web logs-db ps web api db
+.PHONY: help setup env up build down restart logs logs-api logs-web logs-db ps web api db git-sync
 
 PROJECT_NAME := taste-kid
 COMPOSE := docker compose
@@ -48,3 +48,13 @@ web: ## Start only web (assumes API running)
 
 db: ## Start only postgres
 	$(COMPOSE) up postgres
+
+git-sync: ## Sync main and prune gone branches
+	git fetch --prune origin
+	git checkout main
+	git pull --ff-only
+	git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | \
+		while read -r branch track; do \
+			if [ "$$branch" = "main" ]; then continue; fi; \
+			if [ "$$track" = "[gone]" ]; then git branch -d "$$branch"; fi; \
+		done

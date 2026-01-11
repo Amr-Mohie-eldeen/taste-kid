@@ -32,6 +32,7 @@ Common targets:
 - `make up`: start services (no build)
 - `make down`: stop services
 - `make logs`: tail logs
+- `make git-sync`: sync `main` and prune deleted branches
 
 ## Environment
 
@@ -42,6 +43,12 @@ Key variables used by the stack:
 - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT`
 - `API_PORT`
 - `VITE_API_URL` (frontend API base; defaults to `http://localhost:8000`, with `/v1` appended)
+
+Recommendation tuning (optional):
+
+- `DISLIKE_WEIGHT`, `DISLIKE_MIN_COUNT`, `NEUTRAL_RATING_WEIGHT`
+- `SCORING_CONTEXT_LIMIT`, `RERANK_FETCH_MULTIPLIER`, `MAX_FETCH_CANDIDATES`
+- `MAX_SCORING_GENRES`, `MAX_SCORING_KEYWORDS`
 
 ## Frontend
 
@@ -59,6 +66,8 @@ Theme tokens live in `apps/web/src/index.css`. Toggle the graphite theme by addi
 ## Backend
 
 The FastAPI app lives in `apps/api`. API docs are available at `http://localhost:8000/docs`.
+
+Personalized feeds use a two-stage pipeline: vector retrieval plus dislike-aware reranking based on user ratings (1–2★ for dislikes, 3★ neutral, 4–5★ likes).
 
 ## Services
 
