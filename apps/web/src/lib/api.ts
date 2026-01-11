@@ -46,6 +46,7 @@ export type Recommendation = {
   genres: string | null;
   distance: number;
   similarity: number | null;
+  score: number | null;
   poster_url: string | null;
   backdrop_url: string | null;
 };
@@ -94,6 +95,7 @@ export type FeedItem = {
   genres: string | null;
   distance: number | null;
   similarity: number | null;
+  score: number | null;
   source: string;
   poster_url: string | null;
   backdrop_url: string | null;

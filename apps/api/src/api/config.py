@@ -41,6 +41,27 @@ FRONTEND_ORIGINS = [
 ]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_REQUEST_SAMPLE_RATE = _float_env("LOG_REQUEST_SAMPLE_RATE", 1.0, min_val=0.0, max_val=1.0)
+def _int_env(name: str, default: int, min_val: int | None = None) -> int:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"Invalid {name}: '{raw}' is not a valid integer") from exc
+    if min_val is not None and value < min_val:
+        raise ValueError(f"Invalid {name}: {value} is below minimum {min_val}")
+    return value
+
+
 LOG_SLOW_REQUEST_MS = _float_env("LOG_SLOW_REQUEST_MS", 500.0, min_val=0.0)
 # Set to 0 or lower to log all queries.
 LOG_DB_SLOW_QUERY_MS = _float_env("LOG_DB_SLOW_QUERY_MS", 250.0)
+DISLIKE_WEIGHT = _float_env("DISLIKE_WEIGHT", 0.5, min_val=0.0)
+DISLIKE_MIN_COUNT = _int_env("DISLIKE_MIN_COUNT", 3, min_val=1)
+NEUTRAL_RATING_WEIGHT = _float_env("NEUTRAL_RATING_WEIGHT", 0.2, min_val=0.0, max_val=1.0)
+SCORING_CONTEXT_LIMIT = _int_env("SCORING_CONTEXT_LIMIT", 20, min_val=1)
+RERANK_FETCH_MULTIPLIER = _int_env("RERANK_FETCH_MULTIPLIER", 5, min_val=1)
+MAX_FETCH_CANDIDATES = _int_env("MAX_FETCH_CANDIDATES", 500, min_val=50)
+MAX_SCORING_GENRES = _int_env("MAX_SCORING_GENRES", 5, min_val=1)
+MAX_SCORING_KEYWORDS = _int_env("MAX_SCORING_KEYWORDS", 20, min_val=1)

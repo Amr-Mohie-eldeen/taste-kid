@@ -88,15 +88,22 @@ def score_candidate(
     )
 
 
-def rerank_candidates(anchor, candidates, top_n: int):
+def rerank_candidates(anchor=None, candidates=None, top_n: int = 0, anchor_context: ScoringContext | None = None):
+    if candidates is None:
+        candidates = []
     max_vote_count = max((c.vote_count or 0) for c in candidates) if candidates else 0
-    anchor_ctx = build_context(
-        anchor.genres,
-        anchor.keywords,
-        anchor.runtime,
-        anchor.release_date,
-        anchor.original_language,
-    )
+    if anchor_context:
+        anchor_ctx = anchor_context
+    else:
+        if anchor is None:
+            raise ValueError("anchor is required when anchor_context is not provided")
+        anchor_ctx = build_context(
+            anchor.genres,
+            anchor.keywords,
+            anchor.runtime,
+            anchor.release_date,
+            anchor.original_language,
+        )
 
     for candidate in candidates:
         candidate_ctx = build_context(
