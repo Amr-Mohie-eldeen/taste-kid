@@ -11,6 +11,7 @@ from sqlalchemy import text
 from api.config import (
     DISLIKE_MIN_COUNT,
     DISLIKE_WEIGHT,
+    MAX_FETCH_CANDIDATES,
     MAX_SCORING_GENRES,
     MAX_SCORING_KEYWORDS,
     NEUTRAL_RATING_WEIGHT,
@@ -200,6 +201,8 @@ def upsert_rating(user_id: int, movie_id: int, rating: int | None, status: str) 
 def _profile_weight(rating: int | None) -> float:
     if rating is None:
         return 0.0
+    if rating < 3:
+        return 0.0  # Profile weights only apply to ratings >= 3
     if rating == 3:
         return NEUTRAL_RATING_WEIGHT
     return max(0.0, float(rating) / 5.0)
@@ -444,7 +447,9 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
 
     # Fetch more candidates than needed to allow reranking to select the best matches.
     # The multiplier balances candidate diversity with query performance.
-    fetch_limit = limit * RERANK_FETCH_MULTIPLIER
+    # Fetch more candidates than needed to allow reranking to select the best matches.
+    # The multiplier balances candidate diversity with query performance, but capped to prevent excessive load.
+    fetch_limit = min(limit * RERANK_FETCH_MULTIPLIER, MAX_FETCH_CANDIDATES)
 
     # Build column list dynamically
     dislike_col = "(e.embedding <=> :dislike_embedding) AS dislike_distance" if apply_dislike else "NULL AS dislike_distance"
@@ -502,6 +507,9 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     max_vote_count = max((candidate.vote_count or 0) for candidate in candidates)
     like_scores: dict[int, float] = {}
     dislike_scores: dict[int, float] = {}
+
+    # Scoring loop: processes up to RERANK_FETCH_MULTIPLIER * limit candidates.
+    # For large limits, this could be expensive - monitor performance under load.
 
     for candidate in candidates:
         candidate_ctx = build_context(
