@@ -8,7 +8,16 @@ from datetime import date
 from pgvector.psycopg import Vector
 from sqlalchemy import text
 
-from api.config import DISLIKE_MIN_COUNT, DISLIKE_WEIGHT, NEUTRAL_RATING_WEIGHT, USER_UNWATCHED_COOLDOWN_DAYS
+from api.config import (
+    DISLIKE_MIN_COUNT,
+    DISLIKE_WEIGHT,
+    MAX_SCORING_GENRES,
+    MAX_SCORING_KEYWORDS,
+    NEUTRAL_RATING_WEIGHT,
+    RERANK_FETCH_MULTIPLIER,
+    SCORING_CONTEXT_LIMIT,
+    USER_UNWATCHED_COOLDOWN_DAYS,
+)
 from api.db import get_engine
 from api.rerank.features import extract_year, parse_genres, parse_keywords, style_keywords
 from api.rerank.scorer import ScoringContext, build_context, score_candidate
@@ -214,6 +223,8 @@ def _build_weighted_embedding(rows, weight_fn) -> list[float] | None:
     totals = [0.0] * vector_len
     total_weight = 0.0
     for embedding, rating in rows:
+        if embedding is None:
+            continue
         weight = weight_fn(rating)
         if weight <= 0:
             continue
@@ -329,13 +340,13 @@ def _fetch_scoring_rows(user_id: int, min_rating: int, max_rating: int) -> list[
           AND r.rating >= :min_rating
           AND r.rating <= :max_rating
         ORDER BY r.updated_at DESC
-        LIMIT 20
+        LIMIT :limit
         """
     )
     with engine.begin() as conn:
         return [
             dict(row)
-            for row in conn.execute(q, {"user_id": user_id, "min_rating": min_rating, "max_rating": max_rating}).mappings()
+            for row in conn.execute(q, {"user_id": user_id, "min_rating": min_rating, "max_rating": max_rating, "limit": SCORING_CONTEXT_LIMIT}).mappings()
         ]
 
 
@@ -380,8 +391,8 @@ def _build_weighted_scoring_context(rows: list[dict], weight_fn) -> ScoringConte
     if total_weight <= 0:
         return None
 
-    top_genres = {g for g, _ in genre_counts.most_common(5)}
-    top_keywords = {k for k, _ in keyword_counts.most_common(20)}
+    top_genres = {g for g, _ in genre_counts.most_common(MAX_SCORING_GENRES)}
+    top_keywords = {k for k, _ in keyword_counts.most_common(MAX_SCORING_KEYWORDS)}
     avg_runtime = int(runtime_total / runtime_weight) if runtime_weight else None
     avg_year = int(year_total / year_weight) if year_weight else None
     fav_lang = language_counts.most_common(1)[0][0] if language_counts else None
@@ -431,77 +442,48 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
         and min(len(dislike_rows), dislike_ctx_count) >= DISLIKE_MIN_COUNT
     )
 
-    fetch_limit = limit * 5
+    # Fetch more candidates than needed to allow reranking to select the best matches.
+    # The multiplier balances candidate diversity with query performance.
+    fetch_limit = limit * RERANK_FETCH_MULTIPLIER
 
+    # Build column list dynamically
+    dislike_col = "(e.embedding <=> :dislike_embedding) AS dislike_distance" if apply_dislike else "NULL AS dislike_distance"
+
+    q = text(
+        f"""
+        SELECT m.id,
+               m.title,
+               m.release_date,
+               m.genres,
+               m.keywords,
+               m.runtime,
+               m.original_language,
+               m.vote_count,
+               m.poster_path,
+               m.backdrop_path,
+               (e.embedding <=> :embedding) AS distance,
+               {dislike_col}
+        FROM movie_embeddings e
+        JOIN movies m ON m.id = e.movie_id
+        LEFT JOIN user_movie_ratings r
+          ON r.movie_id = m.id
+         AND r.user_id = :user_id
+        WHERE r.movie_id IS NULL
+           OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
+        ORDER BY e.embedding <=> :embedding
+        LIMIT :limit
+        OFFSET :offset
+        """
+    )
+    params = {
+        "user_id": user_id,
+        "embedding": embedding,
+        "limit": fetch_limit,
+        "offset": offset,
+        "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+    }
     if apply_dislike:
-        q = text(
-            """
-            SELECT m.id,
-                   m.title,
-                   m.release_date,
-                   m.genres,
-                   m.keywords,
-                   m.runtime,
-                   m.original_language,
-                   m.vote_count,
-                   m.poster_path,
-                   m.backdrop_path,
-                   (e.embedding <=> :embedding) AS distance,
-                   (e.embedding <=> :dislike_embedding) AS dislike_distance
-            FROM movie_embeddings e
-            JOIN movies m ON m.id = e.movie_id
-            LEFT JOIN user_movie_ratings r
-              ON r.movie_id = m.id
-             AND r.user_id = :user_id
-            WHERE r.movie_id IS NULL
-               OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
-            ORDER BY e.embedding <=> :embedding
-            LIMIT :limit
-            OFFSET :offset
-            """
-        )
-        params = {
-            "user_id": user_id,
-            "embedding": embedding,
-            "dislike_embedding": dislike_embedding,
-            "limit": fetch_limit,
-            "offset": offset,
-            "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-        }
-    else:
-        q = text(
-            """
-            SELECT m.id,
-                   m.title,
-                   m.release_date,
-                   m.genres,
-                   m.keywords,
-                   m.runtime,
-                   m.original_language,
-                   m.vote_count,
-                   m.poster_path,
-                   m.backdrop_path,
-                   (e.embedding <=> :embedding) AS distance,
-                   NULL AS dislike_distance
-            FROM movie_embeddings e
-            JOIN movies m ON m.id = e.movie_id
-            LEFT JOIN user_movie_ratings r
-              ON r.movie_id = m.id
-             AND r.user_id = :user_id
-            WHERE r.movie_id IS NULL
-               OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
-            ORDER BY e.embedding <=> :embedding
-            LIMIT :limit
-            OFFSET :offset
-            """
-        )
-        params = {
-            "user_id": user_id,
-            "embedding": embedding,
-            "limit": fetch_limit,
-            "offset": offset,
-            "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-        }
+        params["dislike_embedding"] = dislike_embedding
 
     with engine.begin() as conn:
         rows = conn.execute(q, params).mappings().all()
