@@ -5,6 +5,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 
+from pgvector.psycopg import Vector
 from sqlalchemy import text
 
 from api.config import DISLIKE_MIN_COUNT, DISLIKE_WEIGHT, NEUTRAL_RATING_WEIGHT, USER_UNWATCHED_COOLDOWN_DAYS
@@ -419,7 +420,9 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     dislike_rows = _fetch_disliked_embeddings(user_id)
     dislike_embedding = None
     if len(dislike_rows) >= DISLIKE_MIN_COUNT:
-        dislike_embedding = _build_weighted_embedding(dislike_rows, _dislike_weight)
+        raw_dislike_embedding = _build_weighted_embedding(dislike_rows, _dislike_weight)
+        if raw_dislike_embedding is not None:
+            dislike_embedding = Vector(raw_dislike_embedding)
 
     dislike_ctx, dislike_ctx_count = _build_user_dislike_context(user_id)
     apply_dislike = (
