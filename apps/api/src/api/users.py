@@ -217,23 +217,34 @@ def _dislike_weight(rating: int | None) -> float:
 def _build_weighted_embedding(rows, weight_fn) -> list[float] | None:
     if not rows:
         return None
-    first_vec = rows[0][0]
-    if first_vec is None:
+
+    # Find the first non-None embedding to determine vector length
+    vector_len = None
+    for embedding, _ in rows:
+        if embedding is not None:
+            vector_len = len(embedding)
+            if vector_len == 0:
+                return None
+            break
+
+    if vector_len is None:
         return None
-    vector_len = len(first_vec)
-    if vector_len == 0:
-        return None
+
     totals = [0.0] * vector_len
     total_weight = 0.0
+
     for embedding, rating in rows:
         if embedding is None:
             continue
+        if len(embedding) != vector_len:
+            continue  # Skip embeddings with mismatched lengths
         weight = weight_fn(rating)
         if weight <= 0:
             continue
         total_weight += weight
         for idx, value in enumerate(embedding):
             totals[idx] += float(value) * weight
+
     if total_weight <= 0:
         return None
     return [value / total_weight for value in totals]
@@ -253,7 +264,10 @@ def _fetch_profile_embeddings(user_id: int):
         """
     )
     with engine.begin() as conn:
-        return conn.execute(q, {"user_id": user_id}).all()
+        return [
+            dict(row)
+            for row in conn.execute(q, {"user_id": user_id}).mappings()
+        ]
 
 
 def _fetch_disliked_embeddings(user_id: int):
@@ -549,12 +563,14 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     )
     results = candidates[:limit]
     if results:
+        log_sample = results[:10]  # Limit logged items to reduce verbosity for large result sets
         logger.info(
             "recommendation_rerank",
             extra={
                 "user_id": user_id,
                 "apply_dislike": apply_dislike,
                 "dislike_count": dislike_ctx_count,
+                "result_count": len(results),
                 "scores": [
                     {
                         "movie_id": item.id,
@@ -562,7 +578,7 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
                         "like_score": round(like_scores.get(item.id, 0.0), 4),
                         "dislike_score": round(dislike_scores[item.id], 4) if item.id in dislike_scores else None,
                     }
-                    for item in results
+                    for item in log_sample
                 ],
             },
         )
