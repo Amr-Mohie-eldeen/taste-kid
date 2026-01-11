@@ -44,3 +44,6 @@ LOG_REQUEST_SAMPLE_RATE = _float_env("LOG_REQUEST_SAMPLE_RATE", 1.0, min_val=0.0
 LOG_SLOW_REQUEST_MS = _float_env("LOG_SLOW_REQUEST_MS", 500.0, min_val=0.0)
 # Set to 0 or lower to log all queries.
 LOG_DB_SLOW_QUERY_MS = _float_env("LOG_DB_SLOW_QUERY_MS", 250.0)
+DISLIKE_WEIGHT = _float_env("DISLIKE_WEIGHT", 0.5, min_val=0.0)
+DISLIKE_MIN_COUNT = int(os.getenv("DISLIKE_MIN_COUNT", "3"))
+NEUTRAL_RATING_WEIGHT = _float_env("NEUTRAL_RATING_WEIGHT", 0.2, min_val=0.0, max_val=1.0)

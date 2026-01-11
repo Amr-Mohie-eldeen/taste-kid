@@ -1,15 +1,19 @@
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
 
 from sqlalchemy import text
 
-from api.config import USER_UNWATCHED_COOLDOWN_DAYS
+from api.config import DISLIKE_MIN_COUNT, DISLIKE_WEIGHT, NEUTRAL_RATING_WEIGHT, USER_UNWATCHED_COOLDOWN_DAYS
 from api.db import get_engine
 from api.rerank.features import extract_year, parse_genres, parse_keywords, style_keywords
-from api.rerank.scorer import ScoringContext, rerank_candidates
+from api.rerank.scorer import ScoringContext, build_context, score_candidate
+
+
+logger = logging.getLogger("api.recommendations")
 
 
 class UserNotFoundError(LookupError):
@@ -41,6 +45,7 @@ class Recommendation:
     poster_path: str | None
     backdrop_path: str | None
     distance: float
+    dislike_distance: float | None = None
     similarity: float | None = None
     score: float | None = None
 
@@ -182,7 +187,44 @@ def upsert_rating(user_id: int, movie_id: int, rating: int | None, status: str) 
         )
 
 
-def _fetch_liked_embeddings(user_id: int):
+def _profile_weight(rating: int | None) -> float:
+    if rating is None:
+        return 0.0
+    if rating == 3:
+        return NEUTRAL_RATING_WEIGHT
+    return max(0.0, float(rating) / 5.0)
+
+
+def _dislike_weight(rating: int | None) -> float:
+    if rating is None or rating > 2:
+        return 0.0
+    return 1.0 if rating <= 1 else 0.5
+
+
+def _build_weighted_embedding(rows, weight_fn) -> list[float] | None:
+    if not rows:
+        return None
+    first_vec = rows[0][0]
+    if first_vec is None:
+        return None
+    vector_len = len(first_vec)
+    if vector_len == 0:
+        return None
+    totals = [0.0] * vector_len
+    total_weight = 0.0
+    for embedding, rating in rows:
+        weight = weight_fn(rating)
+        if weight <= 0:
+            continue
+        total_weight += weight
+        for idx, value in enumerate(embedding):
+            totals[idx] += float(value) * weight
+    if total_weight <= 0:
+        return None
+    return [value / total_weight for value in totals]
+
+
+def _fetch_profile_embeddings(user_id: int):
     engine = get_engine()
     q = text(
         """
@@ -192,7 +234,24 @@ def _fetch_liked_embeddings(user_id: int):
         JOIN movie_embeddings e ON e.movie_id = r.movie_id
         WHERE r.user_id = :user_id
           AND r.status = 'watched'
-          AND r.rating >= 4
+          AND r.rating >= 3
+        """
+    )
+    with engine.begin() as conn:
+        return conn.execute(q, {"user_id": user_id}).all()
+
+
+def _fetch_disliked_embeddings(user_id: int):
+    engine = get_engine()
+    q = text(
+        """
+        SELECT e.embedding AS embedding,
+               r.rating
+        FROM user_movie_ratings r
+        JOIN movie_embeddings e ON e.movie_id = r.movie_id
+        WHERE r.user_id = :user_id
+          AND r.status = 'watched'
+          AND r.rating <= 2
         """
     )
     with engine.begin() as conn:
@@ -218,7 +277,7 @@ def _count_watched_ratings(user_id: int) -> int:
 
 def recompute_profile(user_id: int) -> None:
     _ensure_user(user_id)
-    rows = _fetch_liked_embeddings(user_id)
+    rows = _fetch_profile_embeddings(user_id)
     num_ratings = _count_watched_ratings(user_id)
     if not rows:
         engine = get_engine()
@@ -226,26 +285,10 @@ def recompute_profile(user_id: int) -> None:
             conn.execute(text("DELETE FROM user_profiles WHERE user_id = :user_id"), {"user_id": user_id})
         return
 
-    first_vec = rows[0][0]
-    if first_vec is None:
-        return
-    vector_len = len(first_vec)
-    if vector_len == 0:
-        return
-    totals = [0.0] * vector_len
-    total_weight = 0.0
-    for embedding, rating in rows:
-        weight = (rating or 0) / 5.0
-        if weight <= 0:
-            continue
-        total_weight += weight
-        for idx, value in enumerate(embedding):
-            totals[idx] += float(value) * weight
-
-    if total_weight <= 0:
+    averaged = _build_weighted_embedding(rows, _profile_weight)
+    if averaged is None:
         return
 
-    averaged = [value / total_weight for value in totals]
     engine = get_engine()
     q = text(
         """
@@ -268,53 +311,79 @@ def recompute_profile(user_id: int) -> None:
         )
 
 
-def _build_user_scoring_context(user_id: int) -> ScoringContext | None:
+def _fetch_scoring_rows(user_id: int, min_rating: int, max_rating: int) -> list[dict]:
     engine = get_engine()
     q = text(
         """
-        SELECT m.genres, m.keywords, m.runtime, m.release_date, m.original_language
+        SELECT m.genres,
+               m.keywords,
+               m.runtime,
+               m.release_date,
+               m.original_language,
+               r.rating
         FROM user_movie_ratings r
         JOIN movies m ON m.id = r.movie_id
         WHERE r.user_id = :user_id
           AND r.status = 'watched'
-          AND r.rating >= 4
+          AND r.rating >= :min_rating
+          AND r.rating <= :max_rating
         ORDER BY r.updated_at DESC
         LIMIT 20
         """
     )
     with engine.begin() as conn:
-        rows = conn.execute(q, {"user_id": user_id}).mappings().all()
+        return [
+            dict(row)
+            for row in conn.execute(q, {"user_id": user_id, "min_rating": min_rating, "max_rating": max_rating}).mappings()
+        ]
 
+
+def _build_weighted_scoring_context(rows: list[dict], weight_fn) -> ScoringContext | None:
     if not rows:
         return None
 
-    all_genres = []
-    all_keywords = []
-    runtimes = []
-    years = []
-    languages = []
+    genre_counts = Counter()
+    keyword_counts = Counter()
+    language_counts = Counter()
+    runtime_total = 0.0
+    runtime_weight = 0.0
+    year_total = 0.0
+    year_weight = 0.0
+    total_weight = 0.0
 
     for row in rows:
-        if row["genres"]:
-            all_genres.extend([g.strip().lower() for g in row["genres"].split(",") if g.strip()])
-        if row["keywords"]:
-            all_keywords.extend([k.strip().lower() for k in row["keywords"].split(",") if k.strip()])
-        if row["runtime"]:
-            runtimes.append(row["runtime"])
+        weight = weight_fn(row.get("rating"))
+        if weight <= 0:
+            continue
+        total_weight += weight
 
-        y = extract_year(row["release_date"])
-        if y:
-            years.append(y)
-        if row["original_language"]:
-            languages.append(row["original_language"].lower())
+        for genre in parse_genres(row.get("genres")):
+            genre_counts[genre] += weight
+        for keyword in parse_keywords(row.get("keywords")):
+            keyword_counts[keyword] += weight
 
-    top_genres = {g for g, _ in Counter(all_genres).most_common(5)}
-    # Use more keywords for context to catch nuances
-    top_keywords = {k for k, _ in Counter(all_keywords).most_common(20)}
+        runtime = row.get("runtime")
+        if runtime:
+            runtime_total += float(runtime) * weight
+            runtime_weight += weight
 
-    avg_runtime = int(sum(runtimes) / len(runtimes)) if runtimes else None
-    avg_year = int(sum(years) / len(years)) if years else None
-    fav_lang = Counter(languages).most_common(1)[0][0] if languages else None
+        year = extract_year(row.get("release_date"))
+        if year:
+            year_total += float(year) * weight
+            year_weight += weight
+
+        language = row.get("original_language")
+        if language:
+            language_counts[str(language).lower()] += weight
+
+    if total_weight <= 0:
+        return None
+
+    top_genres = {g for g, _ in genre_counts.most_common(5)}
+    top_keywords = {k for k, _ in keyword_counts.most_common(20)}
+    avg_runtime = int(runtime_total / runtime_weight) if runtime_weight else None
+    avg_year = int(year_total / year_weight) if year_weight else None
+    fav_lang = language_counts.most_common(1)[0][0] if language_counts else None
 
     return ScoringContext(
         genres=top_genres,
@@ -324,6 +393,16 @@ def _build_user_scoring_context(user_id: int) -> ScoringContext | None:
         year=avg_year,
         language=fav_lang,
     )
+
+
+def _build_user_scoring_context(user_id: int) -> ScoringContext | None:
+    rows = _fetch_scoring_rows(user_id, min_rating=3, max_rating=5)
+    return _build_weighted_scoring_context(rows, _profile_weight)
+
+
+def _build_user_dislike_context(user_id: int) -> tuple[ScoringContext | None, int]:
+    rows = _fetch_scoring_rows(user_id, min_rating=1, max_rating=2)
+    return _build_weighted_scoring_context(rows, _dislike_weight), len(rows)
 
 
 def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
@@ -336,58 +415,166 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
         return []
 
     embedding = profile[0]
-    
-    # Fetch more candidates for re-ranking
-    fetch_limit = limit * 5
-    
-    q = text(
-        """
-        SELECT m.id,
-               m.title,
-               m.release_date,
-               m.genres,
-               m.keywords,
-               m.runtime,
-               m.original_language,
-               m.vote_count,
-               m.poster_path,
-               m.backdrop_path,
-               (e.embedding <=> :embedding) AS distance
-        FROM movie_embeddings e
-        JOIN movies m ON m.id = e.movie_id
-        LEFT JOIN user_movie_ratings r
-          ON r.movie_id = m.id
-         AND r.user_id = :user_id
-        WHERE r.movie_id IS NULL
-           OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
-        ORDER BY e.embedding <=> :embedding
-        LIMIT :limit
-        OFFSET :offset
-        """
+
+    dislike_rows = _fetch_disliked_embeddings(user_id)
+    dislike_embedding = None
+    if len(dislike_rows) >= DISLIKE_MIN_COUNT:
+        dislike_embedding = _build_weighted_embedding(dislike_rows, _dislike_weight)
+
+    dislike_ctx, dislike_ctx_count = _build_user_dislike_context(user_id)
+    apply_dislike = (
+        dislike_embedding is not None
+        and dislike_ctx is not None
+        and min(len(dislike_rows), dislike_ctx_count) >= DISLIKE_MIN_COUNT
     )
+
+    fetch_limit = limit * 5
+
+    if apply_dislike:
+        q = text(
+            """
+            SELECT m.id,
+                   m.title,
+                   m.release_date,
+                   m.genres,
+                   m.keywords,
+                   m.runtime,
+                   m.original_language,
+                   m.vote_count,
+                   m.poster_path,
+                   m.backdrop_path,
+                   (e.embedding <=> :embedding) AS distance,
+                   (e.embedding <=> :dislike_embedding) AS dislike_distance
+            FROM movie_embeddings e
+            JOIN movies m ON m.id = e.movie_id
+            LEFT JOIN user_movie_ratings r
+              ON r.movie_id = m.id
+             AND r.user_id = :user_id
+            WHERE r.movie_id IS NULL
+               OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
+            ORDER BY e.embedding <=> :embedding
+            LIMIT :limit
+            OFFSET :offset
+            """
+        )
+        params = {
+            "user_id": user_id,
+            "embedding": embedding,
+            "dislike_embedding": dislike_embedding,
+            "limit": fetch_limit,
+            "offset": offset,
+            "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+        }
+    else:
+        q = text(
+            """
+            SELECT m.id,
+                   m.title,
+                   m.release_date,
+                   m.genres,
+                   m.keywords,
+                   m.runtime,
+                   m.original_language,
+                   m.vote_count,
+                   m.poster_path,
+                   m.backdrop_path,
+                   (e.embedding <=> :embedding) AS distance,
+                   NULL AS dislike_distance
+            FROM movie_embeddings e
+            JOIN movies m ON m.id = e.movie_id
+            LEFT JOIN user_movie_ratings r
+              ON r.movie_id = m.id
+             AND r.user_id = :user_id
+            WHERE r.movie_id IS NULL
+               OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
+            ORDER BY e.embedding <=> :embedding
+            LIMIT :limit
+            OFFSET :offset
+            """
+        )
+        params = {
+            "user_id": user_id,
+            "embedding": embedding,
+            "limit": fetch_limit,
+            "offset": offset,
+            "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+        }
+
     with engine.begin() as conn:
-        rows = conn.execute(
-            q,
-            {
-                "user_id": user_id,
-                "embedding": embedding,
-                "limit": fetch_limit,
-                "offset": offset,
-                "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-            },
-        ).mappings().all()
-    
+        rows = conn.execute(q, params).mappings().all()
+
     candidates = [Recommendation(**row) for row in rows]
+    if not candidates:
+        return []
 
     user_ctx = _build_user_scoring_context(user_id)
-    if user_ctx:
-        # Pass None as anchor because we provide anchor_context directly
-        results = rerank_candidates(None, candidates, limit, anchor_context=user_ctx)
-    else:
+    if not user_ctx:
         results = candidates[:limit]
+        for item in results:
+            item.similarity = 1.0 - item.distance
+        return results
 
-    for item in results:
-        item.similarity = 1.0 - item.distance
+    max_vote_count = max((candidate.vote_count or 0) for candidate in candidates)
+    like_scores: dict[int, float] = {}
+    dislike_scores: dict[int, float] = {}
+
+    for candidate in candidates:
+        candidate_ctx = build_context(
+            candidate.genres,
+            candidate.keywords,
+            candidate.runtime,
+            candidate.release_date,
+            candidate.original_language,
+        )
+        like_score = score_candidate(
+            user_ctx,
+            candidate_ctx,
+            candidate.distance,
+            candidate.vote_count,
+            max_vote_count,
+        )
+        dislike_score = None
+        if apply_dislike and candidate.dislike_distance is not None and dislike_ctx is not None:
+            dislike_score = score_candidate(
+                dislike_ctx,
+                candidate_ctx,
+                candidate.dislike_distance,
+                candidate.vote_count,
+                max_vote_count,
+            )
+
+        candidate.score = like_score - DISLIKE_WEIGHT * (dislike_score or 0.0)
+        candidate.similarity = 1.0 - candidate.distance
+        like_scores[candidate.id] = like_score
+        if dislike_score is not None:
+            dislike_scores[candidate.id] = dislike_score
+
+    candidates.sort(
+        key=lambda item: (
+            -(item.score or 0.0),
+            item.distance,
+            -(item.vote_count or 0),
+        )
+    )
+    results = candidates[:limit]
+    if results:
+        logger.info(
+            "recommendation_rerank",
+            extra={
+                "user_id": user_id,
+                "apply_dislike": apply_dislike,
+                "dislike_count": dislike_ctx_count,
+                "scores": [
+                    {
+                        "movie_id": item.id,
+                        "score": round(item.score or 0.0, 4),
+                        "like_score": round(like_scores.get(item.id, 0.0), 4),
+                        "dislike_score": round(dislike_scores[item.id], 4) if item.id in dislike_scores else None,
+                    }
+                    for item in results
+                ],
+            },
+        )
     return results
 
 
