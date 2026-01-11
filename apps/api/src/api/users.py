@@ -446,8 +446,6 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     )
 
     # Fetch more candidates than needed to allow reranking to select the best matches.
-    # The multiplier balances candidate diversity with query performance.
-    # Fetch more candidates than needed to allow reranking to select the best matches.
     # The multiplier balances candidate diversity with query performance, but capped to prevent excessive load.
     fetch_limit = min(limit * RERANK_FETCH_MULTIPLIER, MAX_FETCH_CANDIDATES)
 
