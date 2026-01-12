@@ -72,7 +72,7 @@ _STATUS_CODE_MAP = {
     status.HTTP_403_FORBIDDEN: "FORBIDDEN",
     status.HTTP_404_NOT_FOUND: "NOT_FOUND",
     status.HTTP_409_CONFLICT: "CONFLICT",
-    status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+    status.HTTP_422_UNPROCESSABLE_CONTENT: "VALIDATION_ERROR",
 }
 
 
@@ -91,7 +91,7 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
     return _error_response(
-        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
         "VALIDATION_ERROR",
         "Validation failed",
         exc.errors(),
