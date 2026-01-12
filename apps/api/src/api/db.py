@@ -42,4 +42,5 @@ def get_engine() -> Engine:
                         "executemany": executemany,
                     },
                 )
+
     return _ENGINE

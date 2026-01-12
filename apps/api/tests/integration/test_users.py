@@ -1,4 +1,3 @@
-
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -11,6 +10,7 @@ async def test_create_user(client: AsyncClient):
     data = response.json()["data"]
     assert "id" in data
     assert data["display_name"] == "Test User"
+
 
 @pytest.mark.asyncio
 async def test_user_ratings_flow(client: AsyncClient, _seeded_movies):  # noqa: ARG001
@@ -28,12 +28,18 @@ async def test_user_ratings_flow(client: AsyncClient, _seeded_movies):  # noqa: 
     assert response.status_code == 200
     ratings = response.json()["data"]
     assert len(ratings) == 1
-    assert ratings[0]["movie_id"] == movie_id if "movie_id" in ratings[0] else ratings[0]["id"] == movie_id
+    assert (
+        ratings[0]["movie_id"] == movie_id
+        if "movie_id" in ratings[0]
+        else ratings[0]["id"] == movie_id
+    )
     assert ratings[0]["rating"] == 5
     assert ratings[0]["status"] == "watched"
 
     # 3. Update rating to None (-> Unwatched logic check)
-    response = await client.put(f"/v1/users/{user_id}/ratings/{movie_id}", json={"rating": None, "status": "unwatched"})
+    response = await client.put(
+        f"/v1/users/{user_id}/ratings/{movie_id}", json={"rating": None, "status": "unwatched"}
+    )
     assert response.status_code == 200
 
     # Verify
@@ -42,6 +48,7 @@ async def test_user_ratings_flow(client: AsyncClient, _seeded_movies):  # noqa: 
     assert len(ratings) == 1
     assert ratings[0]["status"] == "unwatched"
     assert ratings[0]["rating"] is None
+
 
 @pytest.mark.asyncio
 async def test_user_profile_stats(client: AsyncClient, _seeded_movies):  # noqa: ARG001
@@ -58,8 +65,9 @@ async def test_user_profile_stats(client: AsyncClient, _seeded_movies):  # noqa:
     stats = response.json()["data"]
 
     assert stats["user_id"] == user_id
-    assert stats["num_ratings"] == 2 # 2 movies watched
-    assert stats["num_liked"] == 1 # Only movie 1 is >= 4
+    assert stats["num_ratings"] == 2  # 2 movies watched
+    assert stats["num_liked"] == 1  # Only movie 1 is >= 4
+
 
 @pytest.mark.asyncio
 async def test_profile_embedding_weights(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
@@ -80,8 +88,7 @@ async def test_profile_embedding_weights(client: AsyncClient, _seeded_movies, db
     # Fetch profile embedding directly from DB
     with db_engine.begin() as conn:
         row = conn.execute(
-            text("SELECT embedding FROM user_profiles WHERE user_id = :uid"),
-            {"uid": user_id}
+            text("SELECT embedding FROM user_profiles WHERE user_id = :uid"), {"uid": user_id}
         ).fetchone()
 
     assert row is not None
@@ -93,6 +100,7 @@ async def test_profile_embedding_weights(client: AsyncClient, _seeded_movies, db
     val = embedding[0]
     assert val < 0.15
     assert abs(val - 0.116666) < 0.001
+
 
 @pytest.mark.asyncio
 async def test_dislike_isolation(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
@@ -111,8 +119,7 @@ async def test_dislike_isolation(client: AsyncClient, _seeded_movies, db_engine)
     # Fetch profile embedding
     with db_engine.begin() as conn:
         row = conn.execute(
-            text("SELECT embedding FROM user_profiles WHERE user_id = :uid"),
-            {"uid": user_id}
+            text("SELECT embedding FROM user_profiles WHERE user_id = :uid"), {"uid": user_id}
         ).fetchone()
 
     assert row is not None
@@ -122,6 +129,7 @@ async def test_dislike_isolation(client: AsyncClient, _seeded_movies, db_engine)
     # Movie 2 should be completely ignored in the positive embedding.
     # So expected value is exactly 0.1
     assert abs(embedding[0] - 0.1) < 0.0001
+
 
 @pytest.mark.asyncio
 async def test_feed_source_switching(client: AsyncClient, _seeded_movies):  # noqa: ARG001
@@ -153,6 +161,7 @@ async def test_feed_source_switching(client: AsyncClient, _seeded_movies):  # no
     # but we have Movie 2 and 3.
     assert feed[0]["source"] == "profile"
 
+
 @pytest.mark.asyncio
 async def test_state_transitions_and_deletion(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
     """
@@ -163,10 +172,12 @@ async def test_state_transitions_and_deletion(client: AsyncClient, _seeded_movie
 
     def profile_exists():
         with db_engine.begin() as conn:
-            return conn.execute(
-                text("SELECT 1 FROM user_profiles WHERE user_id = :uid"),
-                {"uid": user_id}
-            ).fetchone() is not None
+            return (
+                conn.execute(
+                    text("SELECT 1 FROM user_profiles WHERE user_id = :uid"), {"uid": user_id}
+                ).fetchone()
+                is not None
+            )
 
     # 1. Rate "unwatched" -> No profile
     await client.put(f"/v1/users/{user_id}/ratings/1", json={"status": "unwatched", "rating": None})
@@ -189,6 +200,7 @@ async def test_state_transitions_and_deletion(client: AsyncClient, _seeded_movie
     await client.put(f"/v1/users/{user_id}/ratings/1", json={"status": "unwatched", "rating": None})
     assert not profile_exists()
 
+
 @pytest.mark.asyncio
 async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine):
     """
@@ -207,6 +219,7 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
     # Dislike Group: [0.0, -1.0, ...] (-90 deg) -> Much closer to B (-45) than A (+45)
 
     dim = 768
+
     def vec(vals):
         v = [0.0] * dim
         for i, val in enumerate(vals):
@@ -219,19 +232,23 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
         {"id": 102, "title": "Candidate B", "embedding": vec([0.7071, -0.7071])},
         # Dislikes clustered at -90 deg
         {"id": 201, "title": "Dislike 1", "embedding": vec([0.0, -1.0])},
-        {"id": 202, "title": "Dislike 2", "embedding": vec([0.1, -0.9])}, # jittered slightly
+        {"id": 202, "title": "Dislike 2", "embedding": vec([0.1, -0.9])},  # jittered slightly
         {"id": 203, "title": "Dislike 3", "embedding": vec([-0.1, -0.9])},
     ]
 
     with db_engine.begin() as conn:
         for m in movies:
             conn.execute(
-                text("INSERT INTO movies (id, title, vote_average, vote_count, status, release_date, genres) VALUES (:id, :title, 5.0, 100, 'Released', '2020-01-01', 'Drama')"),
-                {k: v for k, v in m.items() if k != "embedding"}
+                text(
+                    "INSERT INTO movies (id, title, vote_average, vote_count, status, release_date, genres) VALUES (:id, :title, 5.0, 100, 'Released', '2020-01-01', 'Drama')"
+                ),
+                {k: v for k, v in m.items() if k != "embedding"},
             )
             conn.execute(
-                text("INSERT INTO movie_embeddings (movie_id, embedding, embedding_model, doc_hash) VALUES (:movie_id, :embedding, 'test', 'hash')"),
-                {"movie_id": m["id"], "embedding": m["embedding"]}
+                text(
+                    "INSERT INTO movie_embeddings (movie_id, embedding, embedding_model, doc_hash) VALUES (:movie_id, :embedding, 'test', 'hash')"
+                ),
+                {"movie_id": m["id"], "embedding": m["embedding"]},
             )
 
     # 1. Like the Anchor to build profile
@@ -268,4 +285,4 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
     # Score = Similarity - (Weight * DislikeSimilarity)
     # A is far from dislike (orthogonal-ish), B is close.
     # So Score B should drop significantly compared to Score A.
-    assert score_a_final > score_b_final + 0.1 # Expect significant gap
+    assert score_a_final > score_b_final + 0.1  # Expect significant gap

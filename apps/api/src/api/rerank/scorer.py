@@ -24,7 +24,13 @@ def _jaccard(left: set[str], right: set[str]) -> float:
     return len(left & right) / len(left | right)
 
 
-def build_context(genres: str | None, keywords: str | None, runtime: int | None, release_date, language: str | None) -> ScoringContext:
+def build_context(
+    genres: str | None,
+    keywords: str | None,
+    runtime: int | None,
+    release_date,
+    language: str | None,
+) -> ScoringContext:
     parsed_genres = parse_genres(genres)
     parsed_keywords = parse_keywords(keywords)
     return ScoringContext(
@@ -87,7 +93,9 @@ def score_candidate(
     )
 
 
-def rerank_candidates(anchor=None, candidates=None, top_n: int = 0, anchor_context: ScoringContext | None = None):
+def rerank_candidates(
+    anchor=None, candidates=None, top_n: int = 0, anchor_context: ScoringContext | None = None
+):
     if candidates is None:
         candidates = []
     max_vote_count = max((c.vote_count or 0) for c in candidates) if candidates else 0

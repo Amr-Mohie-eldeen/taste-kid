@@ -11,6 +11,7 @@ async def test_get_movie_detail(client: AsyncClient, _seeded_movies):  # noqa: A
     assert data["title"] == "Inception"
     assert "poster_url" in data
 
+
 @pytest.mark.asyncio
 async def test_lookup_movie(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     response = await client.get("/v1/movies/lookup?title=Inception")
@@ -21,6 +22,7 @@ async def test_lookup_movie(client: AsyncClient, _seeded_movies):  # noqa: ARG00
 
     response = await client.get("/v1/movies/lookup?title=NonExistent")
     assert response.status_code == 404
+
 
 @pytest.mark.asyncio
 async def test_similar_movies(client: AsyncClient, _seeded_movies):  # noqa: ARG001
@@ -34,5 +36,7 @@ async def test_similar_movies(client: AsyncClient, _seeded_movies):  # noqa: ARG
     ids = [m["id"] for m in data]
     assert 2 in ids
     assert 3 in ids
-    assert 1 not in ids # Should not return itself usually, but check implementation if it filters itself.
+    assert (
+        1 not in ids
+    )  # Should not return itself usually, but check implementation if it filters itself.
     # api.similarity.get_similar_candidates does filter anchor: "WHERE m.id != :movie_id"
