@@ -1,7 +1,8 @@
-import pytest
 from datetime import date
-from api.rerank.features import parse_genres, extract_year
+
+from api.rerank.features import extract_year, parse_genres
 from api.rerank.scorer import ScoringContext, score_candidate
+
 
 def test_parse_genres():
     assert parse_genres("Action, Comedy") == {"action", "comedy"}
@@ -35,7 +36,7 @@ def test_score_candidate_same_language():
     )
     # Same language should give a bonus
     score_same = score_candidate(anchor, candidate, distance=0.1, vote_count=100, max_vote_count=1000)
-    
+
     candidate_diff = ScoringContext(
         genres={"action"},
         keywords=set(),
@@ -45,7 +46,7 @@ def test_score_candidate_same_language():
         language="fr"
     )
     score_diff = score_candidate(anchor, candidate_diff, distance=0.1, vote_count=100, max_vote_count=1000)
-    
+
     assert score_same > score_diff
 
 def test_score_candidate_runtime_mismatch():
@@ -73,8 +74,8 @@ def test_score_candidate_runtime_mismatch():
         year=2000,
         language="en"
     )
-    
+
     score_match = score_candidate(anchor, candidate_match, distance=0.1, vote_count=100, max_vote_count=1000)
     score_mismatch = score_candidate(anchor, candidate_mismatch, distance=0.1, vote_count=100, max_vote_count=1000)
-    
+
     assert score_match > score_mismatch

@@ -1,14 +1,16 @@
-import os
-import time
-import uuid
+
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import create_engine, text, event
-from testcontainers.postgres import PostgresContainer
 from pgvector.psycopg import register_vector
+from sqlalchemy import create_engine, event, text
+from testcontainers.postgres import PostgresContainer
+
 import api.db
 from api.main import app
+
 
 @pytest.fixture(scope="session")
 def postgres_container():
@@ -19,23 +21,20 @@ def postgres_container():
 def db_engine(postgres_container):
     url = postgres_container.get_connection_url()
     engine = create_engine(url)
-    
+
     # Resolve path to infra/db/init.sql relative to this file
     # tests/conftest.py -> .../apps/api/tests/conftest.py
     # repo root is 3 levels up from apps/api
     # actually, from apps/api/tests, it is ../../../infra/db/init.sql
-    init_sql_path = os.path.join(
-        os.path.dirname(__file__), 
-        "../../../infra/db/init.sql"
-    )
-    with open(init_sql_path, "r") as f:
+    init_sql_path = Path(__file__).parent / "../../../infra/db/init.sql"
+    with init_sql_path.open() as f:
         sql_script = f.read()
-    
+
     # Remove the dynamic sizing block which causes issues in test environment
     # and isn't needed since we start fresh with correct dimensions (768)
     if "DO $$" in sql_script:
         sql_script = sql_script.split("DO $$")[0]
-    
+
     with engine.begin() as conn:
         conn.execute(text(sql_script))
 
@@ -46,7 +45,7 @@ def db_engine(postgres_container):
     @event.listens_for(engine, "connect")
     def _on_connect(dbapi_conn, _):
         register_vector(dbapi_conn)
-            
+
     api.db._ENGINE = engine
     yield engine
     engine.dispose()
@@ -80,6 +79,6 @@ def seeded_movies(db_engine):
                 )
 
 @pytest_asyncio.fixture
-async def client(db_session):
+async def client(db_session):  # noqa: ARG001
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

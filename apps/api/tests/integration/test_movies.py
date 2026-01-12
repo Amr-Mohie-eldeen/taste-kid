@@ -1,8 +1,9 @@
 import pytest
 from httpx import AsyncClient
 
+
 @pytest.mark.asyncio
-async def test_get_movie_detail(client: AsyncClient, seeded_movies):
+async def test_get_movie_detail(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     response = await client.get("/v1/movies/1")
     assert response.status_code == 200
     data = response.json()["data"]
@@ -11,7 +12,7 @@ async def test_get_movie_detail(client: AsyncClient, seeded_movies):
     assert "poster_url" in data
 
 @pytest.mark.asyncio
-async def test_lookup_movie(client: AsyncClient, seeded_movies):
+async def test_lookup_movie(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     response = await client.get("/v1/movies/lookup?title=Inception")
     assert response.status_code == 200
     data = response.json()["data"]
@@ -22,13 +23,13 @@ async def test_lookup_movie(client: AsyncClient, seeded_movies):
     assert response.status_code == 404
 
 @pytest.mark.asyncio
-async def test_similar_movies(client: AsyncClient, seeded_movies):
+async def test_similar_movies(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     # This verifies pgvector works as seeded_movies inserts embeddings
     response = await client.get("/v1/movies/1/similar")
     assert response.status_code == 200
     data = response.json()["data"]
-    
-    # We seeded 3 movies. Movie 1 is the anchor. 
+
+    # We seeded 3 movies. Movie 1 is the anchor.
     # Movies 2 and 3 should be returned as similar.
     ids = [m["id"] for m in data]
     assert 2 in ids

@@ -1,7 +1,8 @@
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
-import math
+
 
 @pytest.mark.asyncio
 async def test_create_user(client: AsyncClient):
@@ -12,7 +13,7 @@ async def test_create_user(client: AsyncClient):
     assert data["display_name"] == "Test User"
 
 @pytest.mark.asyncio
-async def test_user_ratings_flow(client: AsyncClient, seeded_movies):
+async def test_user_ratings_flow(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     # 1. Create User
     create_resp = await client.post("/v1/users", json={"display_name": "Rater"})
     user_id = create_resp.json()["data"]["id"]
@@ -43,7 +44,7 @@ async def test_user_ratings_flow(client: AsyncClient, seeded_movies):
     assert ratings[0]["rating"] is None
 
 @pytest.mark.asyncio
-async def test_user_profile_stats(client: AsyncClient, seeded_movies):
+async def test_user_profile_stats(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     create_resp = await client.post("/v1/users", json={"display_name": "Stats User"})
     user_id = create_resp.json()["data"]["id"]
 
@@ -55,15 +56,15 @@ async def test_user_profile_stats(client: AsyncClient, seeded_movies):
     response = await client.get(f"/v1/users/{user_id}/profile")
     assert response.status_code == 200
     stats = response.json()["data"]
-    
+
     assert stats["user_id"] == user_id
     assert stats["num_ratings"] == 2 # 2 movies watched
     assert stats["num_liked"] == 1 # Only movie 1 is >= 4
 
 @pytest.mark.asyncio
-async def test_profile_embedding_weights(client: AsyncClient, seeded_movies, db_engine):
+async def test_profile_embedding_weights(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
     """
-    Verify that higher ratings shift the profile embedding closer to the movie 
+    Verify that higher ratings shift the profile embedding closer to the movie
     than lower (neutral) ratings.
     Movie 1: [0.1, ...]
     Movie 2: [0.2, ...]
@@ -82,19 +83,19 @@ async def test_profile_embedding_weights(client: AsyncClient, seeded_movies, db_
             text("SELECT embedding FROM user_profiles WHERE user_id = :uid"),
             {"uid": user_id}
         ).fetchone()
-    
+
     assert row is not None
     embedding = row[0]
-    # Check first dimension. 
+    # Check first dimension.
     # Weighted avg: (1.0 * 0.1 + 0.2 * 0.2) / 1.2 = (0.1 + 0.04) / 1.2 = 0.1166...
-    # Midpoint would be 0.15. 
+    # Midpoint would be 0.15.
     # So it should be significantly closer to 0.1 than 0.2.
     val = embedding[0]
     assert val < 0.15
     assert abs(val - 0.116666) < 0.001
 
 @pytest.mark.asyncio
-async def test_dislike_isolation(client: AsyncClient, seeded_movies, db_engine):
+async def test_dislike_isolation(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
     """
     Verify that low ratings (<=2) do NOT affect the positive profile embedding.
     """
@@ -103,7 +104,7 @@ async def test_dislike_isolation(client: AsyncClient, seeded_movies, db_engine):
 
     # Rate Movie 1 (0.1) with 5 stars (Liked)
     await client.put(f"/v1/users/{user_id}/ratings/1", json={"rating": 5})
-    
+
     # Rate Movie 2 (0.2) with 1 star (Disliked)
     await client.put(f"/v1/users/{user_id}/ratings/2", json={"rating": 1})
 
@@ -116,16 +117,16 @@ async def test_dislike_isolation(client: AsyncClient, seeded_movies, db_engine):
 
     assert row is not None
     embedding = row[0]
-    
+
     # The profile should ONLY reflect Movie 1.
     # Movie 2 should be completely ignored in the positive embedding.
     # So expected value is exactly 0.1
     assert abs(embedding[0] - 0.1) < 0.0001
 
 @pytest.mark.asyncio
-async def test_feed_source_switching(client: AsyncClient, seeded_movies):
+async def test_feed_source_switching(client: AsyncClient, _seeded_movies):  # noqa: ARG001
     """
-    Verify feed source switches from 'popularity' to 'profile' 
+    Verify feed source switches from 'popularity' to 'profile'
     once the user has a profile.
     """
     create_resp = await client.post("/v1/users", json={"display_name": "Feed User"})
@@ -135,7 +136,7 @@ async def test_feed_source_switching(client: AsyncClient, seeded_movies):
     resp = await client.get(f"/v1/users/{user_id}/feed")
     assert resp.status_code == 200
     feed = resp.json()["data"]
-    # We might not get items if seeded_movies are few and logic filters them, 
+    # We might not get items if seeded_movies are few and logic filters them,
     # but based on seeded_movies we have 3 items.
     assert len(feed) > 0
     assert feed[0]["source"] == "popularity"
@@ -153,7 +154,7 @@ async def test_feed_source_switching(client: AsyncClient, seeded_movies):
     assert feed[0]["source"] == "profile"
 
 @pytest.mark.asyncio
-async def test_state_transitions_and_deletion(client: AsyncClient, seeded_movies, db_engine):
+async def test_state_transitions_and_deletion(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
     """
     Test that profile is created, updated, and deleted based on rating validity.
     """
@@ -193,7 +194,7 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
     """
     Verify that disliking enough movies triggers the dislike penalization logic,
     pushing similar movies down in the recommendations.
-    
+
     We need DISLIKE_MIN_COUNT (default 3) dislikes to trigger the logic.
     """
     create_resp = await client.post("/v1/users", json={"display_name": "Penalized User"})
@@ -204,7 +205,7 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
     # Candidate A: [0.707, 0.707, ...] (45 deg) -> Same distance to Anchor
     # Candidate B: [0.707, -0.707, ...] (-45 deg) -> Same distance to Anchor
     # Dislike Group: [0.0, -1.0, ...] (-90 deg) -> Much closer to B (-45) than A (+45)
-    
+
     dim = 768
     def vec(vals):
         v = [0.0] * dim
@@ -239,7 +240,7 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
     # 2. Get Recommendations (Baseline)
     resp = await client.get(f"/v1/users/{user_id}/recommendations")
     recs = resp.json()["data"]
-    
+
     def get_score(mid, r_list):
         for x in r_list:
             if x["id"] == mid:
@@ -248,7 +249,7 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
 
     score_a_base = get_score(101, recs)
     score_b_base = get_score(102, recs)
-    
+
     # Should be roughly equal (approx 0.29 distance each)
     assert abs(score_a_base - score_b_base) < 0.01
 
@@ -259,7 +260,7 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine)
     # 4. Get Recommendations (Penalized)
     resp = await client.get(f"/v1/users/{user_id}/recommendations")
     recs = resp.json()["data"]
-    
+
     score_a_final = get_score(101, recs)
     score_b_final = get_score(102, recs)
 
