@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import date
-from typing import Iterable
 
 from api.rerank.style_keywords import STYLE_KEYWORDS
 

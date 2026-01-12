@@ -1,4 +1,4 @@
-.PHONY: help setup env up build down restart logs logs-api logs-web logs-db ps web api db git-sync
+.PHONY: help setup env up build down restart logs logs-api logs-web logs-db ps web api db lint-api format-api check-api-types test-api ci-api git-sync
 
 PROJECT_NAME := taste-kid
 COMPOSE := docker compose
@@ -48,6 +48,21 @@ web: ## Start only web (assumes API running)
 
 db: ## Start only postgres
 	$(COMPOSE) up postgres
+
+lint-api: ## Run linting for API
+	$(MAKE) -C apps/api lint
+
+format-api: ## Run formatting for API
+	$(MAKE) -C apps/api format
+
+check-api-types: ## Run type checking for API
+	$(MAKE) -C apps/api check-types
+
+test-api: ## Run tests for API
+	$(MAKE) -C apps/api test
+
+ci-api: ## Run all CI checks for API
+	$(MAKE) -C apps/api ci
 
 git-sync: ## Sync main and prune gone branches
 	git fetch --prune origin

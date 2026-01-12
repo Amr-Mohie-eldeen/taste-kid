@@ -9,7 +9,6 @@ from sqlalchemy.engine import Engine
 
 from api.config import DATABASE_URL, LOG_DB_SLOW_QUERY_MS
 
-
 _ENGINE: Engine | None = None
 _logger = logging.getLogger("db")
 
@@ -24,11 +23,11 @@ def get_engine() -> Engine:
             register_vector(dbapi_conn)
 
         @event.listens_for(_ENGINE, "before_cursor_execute")
-        def _before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        def _before_cursor_execute(conn, _cursor, _statement, _parameters, _context, _executemany):
             conn.info["query_start_time"] = time.perf_counter()
 
         @event.listens_for(_ENGINE, "after_cursor_execute")
-        def _after_cursor_execute(conn, cursor, statement, parameters, context, executemany):
+        def _after_cursor_execute(conn, _cursor, statement, _parameters, _context, executemany):
             start = conn.info.pop("query_start_time", None)
             if start is None:
                 return

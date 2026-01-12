@@ -5,7 +5,6 @@ from dataclasses import dataclass
 
 from api.rerank.features import extract_year, parse_genres, parse_keywords, style_keywords
 
-
 TONAL_GENRES: set[str] = {"comedy", "horror", "romance", "family"}
 
 

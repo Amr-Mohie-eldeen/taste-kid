@@ -1,7 +1,7 @@
 import json
 import logging
 import logging.config
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from api.config import LOG_LEVEL
 from api.logging_context import request_id_ctx
@@ -16,7 +16,7 @@ def _json_safe(obj):
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
