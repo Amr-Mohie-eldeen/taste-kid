@@ -3,7 +3,7 @@ from httpx import AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_get_movie_detail(client: AsyncClient, _seeded_movies):  # noqa: ARG001
+async def test_get_movie_detail(client: AsyncClient, seeded_movies):  # noqa: ARG001
     response = await client.get("/v1/movies/1")
     assert response.status_code == 200
     data = response.json()["data"]
@@ -13,7 +13,7 @@ async def test_get_movie_detail(client: AsyncClient, _seeded_movies):  # noqa: A
 
 
 @pytest.mark.asyncio
-async def test_lookup_movie(client: AsyncClient, _seeded_movies):  # noqa: ARG001
+async def test_lookup_movie(client: AsyncClient, seeded_movies):  # noqa: ARG001
     response = await client.get("/v1/movies/lookup?title=Inception")
     assert response.status_code == 200
     data = response.json()["data"]
@@ -25,7 +25,7 @@ async def test_lookup_movie(client: AsyncClient, _seeded_movies):  # noqa: ARG00
 
 
 @pytest.mark.asyncio
-async def test_similar_movies(client: AsyncClient, _seeded_movies):  # noqa: ARG001
+async def test_similar_movies(client: AsyncClient, seeded_movies):  # noqa: ARG001
     # This verifies pgvector works as seeded_movies inserts embeddings
     response = await client.get("/v1/movies/1/similar")
     assert response.status_code == 200

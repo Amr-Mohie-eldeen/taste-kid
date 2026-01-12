@@ -13,7 +13,7 @@ async def test_create_user(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_user_ratings_flow(client: AsyncClient, _seeded_movies):  # noqa: ARG001
+async def test_user_ratings_flow(client: AsyncClient, seeded_movies):  # noqa: ARG001
     # 1. Create User
     create_resp = await client.post("/v1/users", json={"display_name": "Rater"})
     user_id = create_resp.json()["data"]["id"]
@@ -51,7 +51,7 @@ async def test_user_ratings_flow(client: AsyncClient, _seeded_movies):  # noqa: 
 
 
 @pytest.mark.asyncio
-async def test_user_profile_stats(client: AsyncClient, _seeded_movies):  # noqa: ARG001
+async def test_user_profile_stats(client: AsyncClient, seeded_movies):  # noqa: ARG001
     create_resp = await client.post("/v1/users", json={"display_name": "Stats User"})
     user_id = create_resp.json()["data"]["id"]
 
@@ -70,7 +70,7 @@ async def test_user_profile_stats(client: AsyncClient, _seeded_movies):  # noqa:
 
 
 @pytest.mark.asyncio
-async def test_profile_embedding_weights(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
+async def test_profile_embedding_weights(client: AsyncClient, seeded_movies, db_engine):  # noqa: ARG001
     """
     Verify that higher ratings shift the profile embedding closer to the movie
     than lower (neutral) ratings.
@@ -103,7 +103,7 @@ async def test_profile_embedding_weights(client: AsyncClient, _seeded_movies, db
 
 
 @pytest.mark.asyncio
-async def test_dislike_isolation(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
+async def test_dislike_isolation(client: AsyncClient, seeded_movies, db_engine):  # noqa: ARG001
     """
     Verify that low ratings (<=2) do NOT affect the positive profile embedding.
     """
@@ -132,7 +132,7 @@ async def test_dislike_isolation(client: AsyncClient, _seeded_movies, db_engine)
 
 
 @pytest.mark.asyncio
-async def test_feed_source_switching(client: AsyncClient, _seeded_movies):  # noqa: ARG001
+async def test_feed_source_switching(client: AsyncClient, seeded_movies):  # noqa: ARG001
     """
     Verify feed source switches from 'popularity' to 'profile'
     once the user has a profile.
@@ -163,7 +163,7 @@ async def test_feed_source_switching(client: AsyncClient, _seeded_movies):  # no
 
 
 @pytest.mark.asyncio
-async def test_state_transitions_and_deletion(client: AsyncClient, _seeded_movies, db_engine):  # noqa: ARG001
+async def test_state_transitions_and_deletion(client: AsyncClient, seeded_movies, db_engine):  # noqa: ARG001
     """
     Test that profile is created, updated, and deleted based on rating validity.
     """
