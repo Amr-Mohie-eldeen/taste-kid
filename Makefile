@@ -1,4 +1,4 @@
-.PHONY: help setup env up build down restart logs logs-api logs-web logs-db ps web api db git-sync
+.PHONY: help setup env up build down restart logs logs-api logs-web logs-db ps web api db lint-api format-api check-api-types test-api ci-api git-sync
 
 PROJECT_NAME := taste-kid
 COMPOSE := docker compose
