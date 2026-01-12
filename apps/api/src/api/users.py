@@ -23,7 +23,6 @@ from api.db import get_engine
 from api.rerank.features import extract_year, parse_genres, parse_keywords, style_keywords
 from api.rerank.scorer import ScoringContext, build_context, score_candidate
 
-
 logger = logging.getLogger("api.recommendations")
 
 
@@ -144,6 +143,8 @@ def create_user(display_name: str | None = None) -> int:
     q = text("INSERT INTO users (display_name) VALUES (:display_name) RETURNING id")
     with engine.begin() as conn:
         row = conn.execute(q, {"display_name": display_name}).first()
+    if row is None:
+        raise RuntimeError("Failed to create user")
     return int(row[0])
 
 
@@ -264,10 +265,7 @@ def _fetch_profile_embeddings(user_id: int):
         """
     )
     with engine.begin() as conn:
-        return [
-            dict(row)
-            for row in conn.execute(q, {"user_id": user_id}).mappings()
-        ]
+        return conn.execute(q, {"user_id": user_id}).all()
 
 
 def _fetch_disliked_embeddings(user_id: int):

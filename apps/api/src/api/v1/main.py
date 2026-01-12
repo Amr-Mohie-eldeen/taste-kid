@@ -4,8 +4,14 @@ from typing import Any, Generic, TypeVar
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from api.config import SIM_CANDIDATES_K, SIM_RERANK_ENABLED, SIM_TOP_N
-from api.config import TMDB_BACKDROP_SIZE, TMDB_IMAGE_BASE_URL, TMDB_POSTER_SIZE
+from api.config import (
+    SIM_CANDIDATES_K,
+    SIM_RERANK_ENABLED,
+    SIM_TOP_N,
+    TMDB_BACKDROP_SIZE,
+    TMDB_IMAGE_BASE_URL,
+    TMDB_POSTER_SIZE,
+)
 from api.movies import fetch_movie_detail
 from api.similarity import (
     apply_rerank,

@@ -10,8 +10,8 @@ from fastapi.responses import JSONResponse
 from starlette import status
 
 from api.config import FRONTEND_ORIGINS, LOG_REQUEST_SAMPLE_RATE, LOG_SLOW_REQUEST_MS
-from api.logging_context import request_id_ctx
 from api.logging_config import configure_logging
+from api.logging_context import request_id_ctx
 from api.similarity import EmbeddingNotFoundError
 from api.users import MovieNotFoundError, UserNotFoundError
 from api.v1.main import router as v1_router
@@ -72,7 +72,7 @@ _STATUS_CODE_MAP = {
     status.HTTP_403_FORBIDDEN: "FORBIDDEN",
     status.HTTP_404_NOT_FOUND: "NOT_FOUND",
     status.HTTP_409_CONFLICT: "CONFLICT",
-    status.HTTP_422_UNPROCESSABLE_ENTITY: "VALIDATION_ERROR",
+    status.HTTP_422_UNPROCESSABLE_CONTENT: "VALIDATION_ERROR",
 }
 
 
@@ -91,7 +91,7 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
     return _error_response(
-        status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
         "VALIDATION_ERROR",
         "Validation failed",
         exc.errors(),
@@ -121,5 +121,9 @@ async def generic_exception_handler(_request: Request, exc: Exception) -> JSONRe
         "INTERNAL_ERROR",
         "An unexpected error occurred",
     )
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
 
 app.include_router(v1_router, prefix="/v1")
