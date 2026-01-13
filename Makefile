@@ -13,17 +13,17 @@ setup: env ## Ensure local env file exists
 	@echo "Environment ready."
 
 up: ## Start all services
-	$(COMPOSE) up
+	$(COMPOSE) up -d
 
 build: ## Build all service images
-	$(COMPOSE) up --build
+	$(COMPOSE) up --build -d
 
 down: ## Stop and remove containers
 	$(COMPOSE) down
 
 restart: ## Restart the stack
 	$(COMPOSE) down
-	$(COMPOSE) up --build
+	$(COMPOSE) up --build -d
 
 ps: ## List running services
 	$(COMPOSE) ps
@@ -71,5 +71,5 @@ git-sync: ## Sync main and prune gone branches
 	git for-each-ref --format='%(refname:short) %(upstream:track)' refs/heads | \
 		while read -r branch track; do \
 			if [ "$$branch" = "main" ]; then continue; fi; \
-			if [ "$$track" = "[gone]" ]; then git branch -d "$$branch"; fi; \
+			if [ "$$track" = "[gone]" ]; then git branch -D "$$branch"; fi; \
 		done
