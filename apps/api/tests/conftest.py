@@ -7,6 +7,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from pgvector.psycopg import register_vector
 from sqlalchemy import create_engine, event, text
+from testcontainers.postgres import PostgresContainer
 
 import api.db
 from api.main import app
@@ -28,15 +29,11 @@ def _ensure_docker_host_env() -> None:
         os.environ["DOCKER_HOST"] = host
 
 
-_ensure_docker_host_env()
-
-os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
-
-from testcontainers.postgres import PostgresContainer
-
-
 @pytest.fixture(scope="session")
 def postgres_container():
+    _ensure_docker_host_env()
+    os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+
     with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
         yield postgres
 
