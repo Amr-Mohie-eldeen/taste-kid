@@ -62,7 +62,9 @@ def _error_payload(code: str, message: str, details: object | None = None) -> di
     return {"error": error}
 
 
-def _error_response(status_code: int, code: str, message: str, details: object | None = None) -> JSONResponse:
+def _error_response(
+    status_code: int, code: str, message: str, details: object | None = None
+) -> JSONResponse:
     return JSONResponse(status_code=status_code, content=_error_payload(code, message, details))
 
 
@@ -89,7 +91,9 @@ async def http_exception_handler(_request: Request, exc: HTTPException) -> JSONR
 
 
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(_request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    _request: Request, exc: RequestValidationError
+) -> JSONResponse:
     return _error_response(
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "VALIDATION_ERROR",
@@ -109,7 +113,9 @@ async def movie_not_found_handler(_request: Request, exc: MovieNotFoundError) ->
 
 
 @app.exception_handler(EmbeddingNotFoundError)
-async def embedding_not_found_handler(_request: Request, exc: EmbeddingNotFoundError) -> JSONResponse:
+async def embedding_not_found_handler(
+    _request: Request, exc: EmbeddingNotFoundError
+) -> JSONResponse:
     return _error_response(status.HTTP_404_NOT_FOUND, "EMBEDDING_NOT_FOUND", str(exc))
 
 
@@ -122,8 +128,10 @@ async def generic_exception_handler(_request: Request, exc: Exception) -> JSONRe
         "An unexpected error occurred",
     )
 
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
 
 app.include_router(v1_router, prefix="/v1")

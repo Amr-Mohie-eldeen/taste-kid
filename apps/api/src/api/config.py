@@ -8,7 +8,9 @@ def _bool_env(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
-def _float_env(name: str, default: float, min_val: float | None = None, max_val: float | None = None) -> float:
+def _float_env(
+    name: str, default: float, min_val: float | None = None, max_val: float | None = None
+) -> float:
     raw = os.getenv(name)
     if raw is None:
         return default
@@ -41,6 +43,8 @@ FRONTEND_ORIGINS = [
 ]
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LOG_REQUEST_SAMPLE_RATE = _float_env("LOG_REQUEST_SAMPLE_RATE", 1.0, min_val=0.0, max_val=1.0)
+
+
 def _int_env(name: str, default: int, min_val: int | None = None) -> int:
     raw = os.getenv(name)
     if raw is None:

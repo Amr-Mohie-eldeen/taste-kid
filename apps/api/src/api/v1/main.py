@@ -43,9 +43,13 @@ class ResponseEnvelope(BaseModel, Generic[ResponseData]):
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
-def _build_image_urls(poster_path: str | None, backdrop_path: str | None) -> tuple[str | None, str | None]:
+def _build_image_urls(
+    poster_path: str | None, backdrop_path: str | None
+) -> tuple[str | None, str | None]:
     poster_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_POSTER_SIZE}{poster_path}" if poster_path else None
-    backdrop_url = f"{TMDB_IMAGE_BASE_URL}{TMDB_BACKDROP_SIZE}{backdrop_path}" if backdrop_path else None
+    backdrop_url = (
+        f"{TMDB_IMAGE_BASE_URL}{TMDB_BACKDROP_SIZE}{backdrop_path}" if backdrop_path else None
+    )
     return poster_url, backdrop_url
 
 
@@ -58,11 +62,15 @@ def _map_with_image_urls(items, response_cls):
     return [response_cls(**_with_image_urls(item)) for item in items]
 
 
-def _envelope(data: ResponseData, meta: dict[str, Any] | None = None) -> ResponseEnvelope[ResponseData]:
+def _envelope(
+    data: ResponseData, meta: dict[str, Any] | None = None
+) -> ResponseEnvelope[ResponseData]:
     return ResponseEnvelope(data=data, meta=meta or {})
 
 
-def _paginate(items: list[ResponseData], cursor: int, limit: int) -> tuple[list[ResponseData], dict[str, Any]]:
+def _paginate(
+    items: list[ResponseData], cursor: int, limit: int
+) -> tuple[list[ResponseData], dict[str, Any]]:
     has_more = len(items) > limit
     page_items = items[:limit]
     next_cursor = str(cursor + limit) if has_more else None
@@ -277,7 +285,10 @@ def rate_movie_simple(user_id: int, payload: RateMovieRequest):
     return _process_rating(user_id, payload.movie_id, payload.rating, payload.status)
 
 
-@router.get("/users/{user_id}/recommendations", response_model=ResponseEnvelope[list[RecommendationResponse]])
+@router.get(
+    "/users/{user_id}/recommendations",
+    response_model=ResponseEnvelope[list[RecommendationResponse]],
+)
 def user_recommendations(
     user_id: int,
     k: int = Query(default=20, ge=1, le=100),
@@ -288,7 +299,9 @@ def user_recommendations(
     return _envelope(_map_with_image_urls(page_recs, RecommendationResponse), meta)
 
 
-@router.get("/users/{user_id}/rating-queue", response_model=ResponseEnvelope[list[RatingQueueResponse]])
+@router.get(
+    "/users/{user_id}/rating-queue", response_model=ResponseEnvelope[list[RatingQueueResponse]]
+)
 def rating_queue(
     user_id: int,
     k: int = Query(default=20, ge=1, le=100),
@@ -335,7 +348,10 @@ def user_feed(
     return _envelope(_map_with_image_urls(page_items, FeedItemResponse), meta)
 
 
-@router.get("/users/{user_id}/movies/{movie_id}/match", response_model=ResponseEnvelope[UserMovieMatchResponse])
+@router.get(
+    "/users/{user_id}/movies/{movie_id}/match",
+    response_model=ResponseEnvelope[UserMovieMatchResponse],
+)
 def user_movie_match(user_id: int, movie_id: int):
     match = get_user_movie_match(user_id, movie_id)
     return _envelope(UserMovieMatchResponse(**match.__dict__))

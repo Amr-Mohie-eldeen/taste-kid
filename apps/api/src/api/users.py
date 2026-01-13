@@ -300,8 +300,6 @@ def _count_watched_ratings(user_id: int) -> int:
         return int(conn.execute(q, {"user_id": user_id}).scalar() or 0)
 
 
-
-
 def recompute_profile(user_id: int) -> None:
     _ensure_user(user_id)
     rows = _fetch_profile_embeddings(user_id)
@@ -309,7 +307,9 @@ def recompute_profile(user_id: int) -> None:
     if not rows:
         engine = get_engine()
         with engine.begin() as conn:
-            conn.execute(text("DELETE FROM user_profiles WHERE user_id = :user_id"), {"user_id": user_id})
+            conn.execute(
+                text("DELETE FROM user_profiles WHERE user_id = :user_id"), {"user_id": user_id}
+            )
         return
 
     averaged = _build_weighted_embedding(rows, _profile_weight)
@@ -361,7 +361,15 @@ def _fetch_scoring_rows(user_id: int, min_rating: int, max_rating: int) -> list[
     with engine.begin() as conn:
         return [
             dict(row)
-            for row in conn.execute(q, {"user_id": user_id, "min_rating": min_rating, "max_rating": max_rating, "limit": SCORING_CONTEXT_LIMIT}).mappings()
+            for row in conn.execute(
+                q,
+                {
+                    "user_id": user_id,
+                    "min_rating": min_rating,
+                    "max_rating": max_rating,
+                    "limit": SCORING_CONTEXT_LIMIT,
+                },
+            ).mappings()
         ]
 
 
@@ -462,7 +470,11 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     fetch_limit = min(limit * RERANK_FETCH_MULTIPLIER, MAX_FETCH_CANDIDATES)
 
     # Build column list dynamically
-    dislike_col = "(e.embedding <=> :dislike_embedding) AS dislike_distance" if apply_dislike else "NULL AS dislike_distance"
+    dislike_col = (
+        "(e.embedding <=> :dislike_embedding) AS dislike_distance"
+        if apply_dislike
+        else "NULL AS dislike_distance"
+    )
 
     q = text(
         f"""
@@ -574,7 +586,9 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
                         "movie_id": item.id,
                         "score": round(item.score or 0.0, 4),
                         "like_score": round(like_scores.get(item.id, 0.0), 4),
-                        "dislike_score": round(dislike_scores[item.id], 4) if item.id in dislike_scores else None,
+                        "dislike_score": round(dislike_scores[item.id], 4)
+                        if item.id in dislike_scores
+                        else None,
                     }
                     for item in log_sample
                 ],
@@ -606,15 +620,19 @@ def get_rating_queue(user_id: int, limit: int, offset: int = 0) -> list[RatingQu
         """
     )
     with engine.begin() as conn:
-        rows = conn.execute(
-            q,
-            {
-                "user_id": user_id,
-                "limit": limit,
-                "offset": offset,
-                "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-            },
-        ).mappings().all()
+        rows = (
+            conn.execute(
+                q,
+                {
+                    "user_id": user_id,
+                    "limit": limit,
+                    "offset": offset,
+                    "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+                },
+            )
+            .mappings()
+            .all()
+        )
     return [RatingQueueItem(**row) for row in rows]
 
 
@@ -644,13 +662,17 @@ def _get_next_from_recs(user_id: int) -> NextMovie | None:
         """
     )
     with engine.begin() as conn:
-        row = conn.execute(
-            q,
-            {
-                "user_id": user_id,
-                "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-            },
-        ).mappings().first()
+        row = (
+            conn.execute(
+                q,
+                {
+                    "user_id": user_id,
+                    "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+                },
+            )
+            .mappings()
+            .first()
+        )
     if not row:
         return None
     return NextMovie(source="profile", **row)
@@ -677,13 +699,17 @@ def _get_next_from_popularity(user_id: int) -> NextMovie | None:
         """
     )
     with engine.begin() as conn:
-        row = conn.execute(
-            q,
-            {
-                "user_id": user_id,
-                "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-            },
-        ).mappings().first()
+        row = (
+            conn.execute(
+                q,
+                {
+                    "user_id": user_id,
+                    "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+                },
+            )
+            .mappings()
+            .first()
+        )
     if not row:
         return None
     return NextMovie(source="popularity", **row)
@@ -783,7 +809,9 @@ def get_user_ratings(user_id: int, limit: int, offset: int = 0) -> list[RatedMov
         """
     )
     with engine.begin() as conn:
-        rows = conn.execute(q, {"user_id": user_id, "limit": limit, "offset": offset}).mappings().all()
+        rows = (
+            conn.execute(q, {"user_id": user_id, "limit": limit, "offset": offset}).mappings().all()
+        )
     return [
         RatedMovie(
             id=row["id"],
