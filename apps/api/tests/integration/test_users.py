@@ -23,7 +23,9 @@ def _fetch_vector(db_engine, sql: str, params: dict) -> list[float]:
     vector = row[0]
     assert vector is not None, "Expected vector column to be non-null"
 
-    if isinstance(vector, list):
+    if hasattr(vector, "tolist"):
+        values = vector.tolist()
+    elif isinstance(vector, list):
         values = vector
     elif isinstance(vector, Sequence):
         values = list(vector)

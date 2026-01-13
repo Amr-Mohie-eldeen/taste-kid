@@ -1,42 +1,42 @@
 import os
+import subprocess
 from pathlib import Path
 
-import docker
 import pytest
 import pytest_asyncio
-from docker.errors import DockerException
 from httpx import ASGITransport, AsyncClient
 from pgvector.psycopg import register_vector
 from sqlalchemy import create_engine, event, text
-from testcontainers.postgres import PostgresContainer
 
 import api.db
 from api.main import app
 
 
-def _docker_available() -> bool:
-    client = None
+def _ensure_docker_host_env() -> None:
+    if os.environ.get("DOCKER_HOST"):
+        return
+
     try:
-        client = docker.from_env(timeout=5)
-        client.ping()
-        return True
-    except DockerException:
-        return False
-    finally:
-        if client is not None:
-            try:
-                client.close()
-            except Exception:
-                pass
+        host = subprocess.check_output(
+            ["docker", "context", "inspect", "--format", "{{.Endpoints.docker.Host}}"],
+            text=True,
+        ).strip()
+    except Exception:
+        return
+
+    if host:
+        os.environ["DOCKER_HOST"] = host
+
+
+_ensure_docker_host_env()
+
+os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+
+from testcontainers.postgres import PostgresContainer
 
 
 @pytest.fixture(scope="session")
 def postgres_container():
-    if not _docker_available():
-        if os.getenv("REQUIRE_DOCKER_TESTS") == "1":
-            pytest.fail("Docker daemon not reachable; start Docker to run integration tests")
-        pytest.skip("Docker daemon not reachable; start Docker to run integration tests")
-
     with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
         yield postgres
 
@@ -88,7 +88,7 @@ def db_session(db_engine):
 def embedding_dim(db_engine) -> int:
     q = text(
         """
-        SELECT a.atttypmod - 4 AS dims
+        SELECT substring(format_type(a.atttypid, a.atttypmod) from '\\((\\d+)\\)')::int AS dims
         FROM pg_attribute a
         JOIN pg_class c ON c.oid = a.attrelid
         JOIN pg_namespace n ON n.oid = c.relnamespace
