@@ -1,7 +1,9 @@
 from pathlib import Path
 
+import docker
 import pytest
 import pytest_asyncio
+from docker.errors import DockerException
 from httpx import ASGITransport, AsyncClient
 from pgvector.psycopg import register_vector
 from sqlalchemy import create_engine, event, text
@@ -11,8 +13,27 @@ import api.db
 from api.main import app
 
 
+def _docker_available() -> bool:
+    client = None
+    try:
+        client = docker.from_env(timeout=5)
+        client.ping()
+        return True
+    except DockerException:
+        return False
+    finally:
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
+
+
 @pytest.fixture(scope="session")
 def postgres_container():
+    if not _docker_available():
+        pytest.skip("Docker daemon not reachable; start Docker to run integration tests")
+
     with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
         yield postgres
 
@@ -30,8 +51,8 @@ def db_engine(postgres_container):
     with init_sql_path.open() as f:
         sql_script = f.read()
 
-    # Remove the dynamic sizing block which causes issues in test environment
-    # and isn't needed since we start fresh with correct dimensions (768)
+    # Remove the dynamic sizing block which causes issues in the test environment.
+    # It's not needed since we start fresh with the schema-defined dimensions.
     if "DO $$" in sql_script:
         sql_script = sql_script.split("DO $$")[0]
 
@@ -61,7 +82,26 @@ def db_session(db_engine):
 
 
 @pytest.fixture(scope="session")
-def seeded_movies(db_engine):
+def embedding_dim(db_engine) -> int:
+    q = text(
+        """
+        SELECT a.atttypmod - 4 AS dims
+        FROM pg_attribute a
+        JOIN pg_class c ON c.oid = a.attrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relname = 'movie_embeddings'
+          AND a.attname = 'embedding'
+          AND n.nspname = 'public'
+        """
+    )
+    with db_engine.begin() as conn:
+        dims = conn.execute(q).scalar()
+    assert isinstance(dims, int) and dims > 0
+    return dims
+
+
+@pytest.fixture(scope="session")
+def seeded_movies(db_engine, embedding_dim):
     # Insert 3 movies with embeddings for similarity tests
     movies = [
         {
@@ -75,7 +115,7 @@ def seeded_movies(db_engine):
             "original_language": "en",
             "genres": "Action,Science Fiction",
             "keywords": "dream,heist",
-            "embedding": [0.1] * 768,
+            "embedding": [0.1] * embedding_dim,
         },
         {
             "id": 2,
@@ -88,7 +128,7 @@ def seeded_movies(db_engine):
             "original_language": "en",
             "genres": "Action,Science Fiction",
             "keywords": "simulation,ai",
-            "embedding": [0.2] * 768,
+            "embedding": [0.2] * embedding_dim,
         },
         {
             "id": 3,
@@ -101,24 +141,30 @@ def seeded_movies(db_engine):
             "original_language": "en",
             "genres": "Adventure,Drama,Science Fiction",
             "keywords": "space,black hole",
-            "embedding": [0.15] * 768,
+            "embedding": [0.15] * embedding_dim,
         },
     ]
     with db_engine.begin() as conn:
         if conn.execute(text("SELECT COUNT(*) FROM movies")).scalar() == 0:
-            for m in movies:
+            for movie in movies:
                 conn.execute(
                     text(
                         "INSERT INTO movies (id, title, vote_average, vote_count, status, release_date, runtime, original_language, genres, keywords) VALUES (:id, :title, :vote_average, :vote_count, :status, :release_date, :runtime, :original_language, :genres, :keywords)"
                     ),
-                    {k: v for k, v in m.items() if k != "embedding"},
+                    {key: value for key, value in movie.items() if key != "embedding"},
                 )
                 conn.execute(
                     text(
                         "INSERT INTO movie_embeddings (movie_id, embedding, embedding_model, doc_hash) VALUES (:movie_id, :embedding, 'test', 'hash')"
                     ),
-                    {"movie_id": m["id"], "embedding": m["embedding"]},
+                    {"movie_id": movie["id"], "embedding": movie["embedding"]},
                 )
+    return {
+        "inception_id": 1,
+        "matrix_id": 2,
+        "interstellar_id": 3,
+        "embedding_dim": embedding_dim,
+    }
 
 
 @pytest_asyncio.fixture

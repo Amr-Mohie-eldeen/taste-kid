@@ -29,8 +29,8 @@ Use the notes below when making changes in this repo.
 - Dependencies managed via `uv` + `pyproject.toml` (`uv sync` in Dockerfile).
 
 **Linting:** none configured.
-**Tests:** none configured.
-**Single test:** not applicable (no test framework). Use smoke checks via the API or `scripts/test_retrieval.sh`.
+**Tests:** Integration and Unit tests configured using `pytest` and `testcontainers`.
+**Single test:** Run `make test-api` (requires Docker) or `uv run pytest` inside `apps/api`.
 
 ### Data Pipelines (pipelines/ingest_tmdb)
 - Ingest TMDB data: `uv run python src/ingest.py`
