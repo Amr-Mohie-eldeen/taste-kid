@@ -1,154 +1,148 @@
 # AGENTS.md
 
-This repository contains a FastAPI + Postgres backend, a React/Vite frontend, and data pipelines.
-Use the notes below when making changes in this repo.
+This repo contains:
+- `apps/api`: FastAPI + Postgres/pgvector backend (Python, `uv`, Ruff, Pyright, Pytest)
+- `apps/web`: React/Vite + Tailwind frontend (TypeScript)
+- `pipelines/ingest_tmdb`: ingestion/embedding jobs (Python, `uv`)
 
-## Build, Run, Lint, Test
+This file is guidance for agentic coding tools operating in this repo.
 
-### Docker / Full Stack (repo root)
-- `make setup` - copy `.env.example` to `.env` if missing.
-- `make build` - build and start all services via Docker Compose.
-- `make up` - start services without rebuild.
-- `make down` - stop and remove containers.
-- `make logs` - follow all services.
-- `make logs-api` / `make logs-web` / `make logs-db` - follow a single service.
+## Quick Commands (Start Here)
 
-### Frontend (apps/web)
-- Install deps: `npm install`
-- Dev server: `npm run dev`
-- Production build (also runs `tsc`): `npm run build`
-- Preview build: `npm run preview`
+### Full stack (Docker Compose, repo root)
+- `make setup` (creates `.env` from `.env.example` if missing)
+- `make build` (build + start everything)
+- `make up` / `make down` / `make restart`
+- `make logs` / `make logs-api` / `make logs-web` / `make logs-db`
 
-**Linting:** no ESLint/Prettier configured. Use `npm run build` for type-checking.
-**Tests:** no frontend test runner configured.
-**Single test:** not applicable (no test framework); use targeted UI/manual checks instead.
+### API checks (repo root)
+- `make lint-api` (Ruff lint)
+- `make format-api` (Ruff format)
+- `make check-api-types` (Pyright)
+- `make test-api` (Pytest)
+- `make ci-api` (lint + types + tests)
+
+### Web (apps/web)
+- `npm install`
+- `npm run dev` (Vite dev server)
+- `npm run build` (runs `tsc -b` then `vite build`)
+- `npm run preview`
+
+### Pipelines (pipelines/ingest_tmdb)
+- `uv run python src/ingest.py`
+- `uv run python src/embed_movies.py`
+- `uv run python src/reset_embeddings.py`
+
+## Running a Single Test (API)
+
+API tests live in `apps/api/tests` and are executed via `uv run pytest`.
+
+From repo root:
+- `make test-api` (all tests)
+
+From `apps/api`:
+- Run a single test file: `uv run pytest tests/test_users.py`
+- Run a single test function: `uv run pytest tests/test_users.py::test_create_user`
+- Run by substring match: `uv run pytest -k "create_user"`
+- Useful flags: `-vv`, `-x`, `--maxfail=1`, `-s`
+
+Notes:
+- Tests use `testcontainers` and require Docker to be installed and running.
+- The integration DB is a `pgvector/pgvector:pg16` container started by the suite.
+
+## Lint / Format / Types
 
 ### Backend (apps/api)
-- The Docker image runs: `uv run uvicorn api.main:app --host 0.0.0.0 --port 8000 --no-access-log`
-- Local run (suggested): `uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000`
-- Dependencies managed via `uv` + `pyproject.toml` (`uv sync` in Dockerfile).
+Defined in `apps/api/Makefile`:
+- Lint: `uv run ruff check .`
+- Format: `uv run ruff format .`
+- Types: `uv run pyright`
 
-**Linting:** none configured.
-**Tests:** Integration and Unit tests configured using `pytest` and `testcontainers`.
-**Single test:** Run `make test-api` (requires Docker) or `uv run pytest` inside `apps/api`.
+Tool config is in `apps/api/pyproject.toml`:
+- Ruff: `line-length = 100`, `target-version = py311`, lint selects include `E/W/F/I/B/C4/UP/ARG/PTH`, ignores `E501` and `B008`.
+- Pyright: `typeCheckingMode = standard`, `pythonVersion = 3.11`, `include = ["src"]`.
+- Pytest: `asyncio_mode = auto`, `testpaths = ["tests"]`, `pythonpath = ["src"]`.
 
-### Data Pipelines (pipelines/ingest_tmdb)
-- Ingest TMDB data: `uv run python src/ingest.py`
-- Generate embeddings: `uv run python src/embed_movies.py`
-- Reset embeddings table: `uv run python src/reset_embeddings.py`
+### Frontend (apps/web)
+- No ESLint/Prettier configured.
+- Type-checking happens via `npm run build` (runs `tsc -b`).
 
-### Scripts / Smoke Checks
-- Similarity smoke test: `scripts/test_retrieval.sh "Movie Title"`
-  - Uses `BASE_URL` env var (defaults to `http://localhost:8000`).
-  - Requires `jq` installed.
+### Pipelines (pipelines/ingest_tmdb)
+- No lint/type/test automation configured.
+- Prefer running scripts via `uv run` so dependencies match `pyproject.toml`.
+
+## Smoke / Demo Scripts
+
+These assume the API is running and require `jq`:
+- `scripts/test_retrieval.sh "Movie Title"` (uses `BASE_URL`, default `http://localhost:8000`)
+- `scripts/smoke_user_flow.sh`
+- `scripts/user_recs_demo.sh`
 
 ## Repo Layout
-- `apps/web` - React + Vite frontend.
-- `apps/api` - FastAPI service (`src/api`).
-- `pipelines/ingest_tmdb` - ingestion + embeddings jobs.
-- `scripts` - ad-hoc helpers (shell scripts).
-- `data` - local datasets/artifacts.
-- `infra` - infra/devops helpers.
-- `docs` - product/architecture notes.
-
-## Git Workflow
-- Use short-lived feature branches (no direct commits to `main`).
-- Open GitHub issues for product/behavior changes before coding.
-- Require pull requests for non-doc changes; docs-only updates can merge directly if needed.
-- Keep PRs scoped and include context, screenshots, or API examples when relevant.
-- Follow existing commit style: `<type>: <summary>` (e.g. `docs: update README`, `chore: add logging`).
-- Use `make git-sync` to update `main` and prune local branches whose upstreams were deleted.
+- `apps/web/src`: React pages/components, API client in `apps/web/src/lib/api.ts`
+- `apps/api/src/api`: FastAPI app, routes under `/v1`
+- `infra/db/init.sql`: schema/bootstrap SQL used by Postgres and tests
 
 ## Code Style Guidelines
 
 ### General
-- Prefer small, focused changes scoped to a single feature or bug.
-- Keep behavior consistent with existing response shapes and UI styling.
-- Update related types or schemas when you change API payloads.
+- Prefer small, focused changes; avoid drive-by refactors.
+- Mirror API payload shapes consistently across frontend/backend.
 - Avoid adding new tooling (linters/formatters) unless requested.
 
-### Frontend (apps/web)
+### Python (apps/api)
 **Imports**
-- Order imports: third-party packages first, then local modules.
-- Use `import type` for type-only imports (see `src/types.ts`).
-- Prefer named exports for components/utilities; default export only for `App`.
-
-**Formatting**
-- 2-space indentation.
-- Double quotes for strings.
-- Semicolons at statement ends.
-- Wrap long JSX props across lines, align closing brackets.
-
-**React + TypeScript**
-- Components use PascalCase filenames and exported functions (e.g. `AppShell`).
-- Hooks use `use*` naming (`useStore`).
-- Types are `type` aliases unless an interface fits better (see `lib/api.ts`).
-- Avoid `any`; use explicit unions and nullable types (`string | null`).
-- Keep API responses typed and mirrored to backend schemas.
-
-**Routing + Layout**
-- Keep route definitions centralized in `src/App.tsx`.
-- Layout components live in `src/components` and wrap pages via `Outlet`.
-
-**State + Data Fetching**
-- React Query is the primary async cache (`QueryClientProvider`, `useQuery`).
-- Centralize API access in `src/lib/api.ts`.
-- Use `ApiError` for API failures and handle missing data explicitly.
-- The client appends `/v1` to `VITE_API_URL` if missing.
-- Keep pagination wired to `cursor` + `k` query params.
-
-**Styling**
-- Tailwind classes drive layout and colors; keep class strings readable.
-- Theme tokens live in `src/index.css` and are applied via CSS variables.
-- Avoid inline styles unless necessary; prefer utility classes.
-
-**Naming**
-- camelCase for variables/functions.
-- PascalCase for React components and types.
-- Keep API field names in snake_case to match backend payloads.
-
-### Backend (apps/api)
-**Imports**
-- Standard library imports first, blank line, third-party imports, blank line, local `api.*` imports.
-- Use absolute imports from `api` package (e.g. `from api.config import ...`).
+- Order: stdlib, blank line, third-party, blank line, local `api.*`.
+- Use absolute imports from the `api` package (`from api.config import ...`).
 
 **Formatting**
 - 4-space indentation.
-- Use type hints for public functions and dataclasses.
-- Keep SQL strings in triple-quoted blocks aligned with the SQL keywords.
+- Follow Ruff formatting; do not hand-format against it.
+- Keep SQL in triple-quoted strings aligned with SQL keywords.
 
-**Types + Models**
-- Use `dataclass` for internal row models (`users.py`, `similarity.py`).
-- Use Pydantic `BaseModel` for request/response schemas in API routes.
-- Prefer `str | None` unions instead of `Optional[str]` (Python 3.11 style).
+**Types**
+- Prefer `str | None` over `Optional[str]` (Python 3.11 style).
+- Use `dataclass` for internal row/result models.
+- Use Pydantic `BaseModel` for request/response schemas.
 
-**Error Handling + Responses**
-- API responses use an envelope `{"data": ..., "meta": ...}`.
-- Raise `HTTPException` for 4xx errors; rely on global handlers for formatting.
-- Custom domain errors (`UserNotFoundError`, `MovieNotFoundError`) are mapped to 404s in `api.main`.
-- Always return consistent error codes (`USER_NOT_FOUND`, `MOVIE_NOT_FOUND`, etc.).
-- Pagination uses `cursor` (offset) + `k` (page size); fetch `k + 1` to set `has_more`.
+**Error handling**
+- Raise `fastapi.HTTPException` for 4xx.
+- Prefer domain exceptions (`UserNotFoundError`, `MovieNotFoundError`, etc.) and map them centrally (see `api.main`).
+- Keep error codes stable (`USER_NOT_FOUND`, `MOVIE_NOT_FOUND`, etc.).
+- Responses use an envelope: `{"data": ..., "meta": ...}`.
 
 **Database**
-- SQLAlchemy is used via raw SQL (`sqlalchemy.text`) and `engine.begin()` context.
-- Keep SQL parameterized; avoid string interpolation.
-- When adding queries, return dataclass objects for downstream typing.
-
-**Config + Env**
-- Read settings from `api.config` and `.env` (copied from `.env.example`).
-- Avoid hardcoding base URLs or DB connection strings.
+- Use parameterized queries (`sqlalchemy.text`) inside `engine.begin()`.
+- Avoid string interpolation in SQL.
 
 **Logging**
-- Logging is configured via `api.logging_config.configure_logging()`.
-- Request logging attaches `X-Request-ID` and uses `request_id_ctx`.
-- Use `logger = logging.getLogger("api")` for service logs.
+- Use `logger = logging.getLogger("api")`.
+- Request logging attaches `X-Request-ID` via request context.
 
-### Pipelines (pipelines/ingest_tmdb)
-- Use `uv run` to execute scripts with managed dependencies.
-- Keep data ingestion and embedding logic separate (`ingest.py` vs `embed_movies.py`).
-- Prefer explicit column names and types when writing to Postgres.
+### TypeScript/React (apps/web)
+**Imports**
+- Third-party imports first, then local modules.
+- Use `import type` for type-only imports.
 
-## Notes for Agents
-- There are no Cursor/Copilot rules in this repo.
-- There is no existing `AGENTS.md`; this file is the canonical reference.
-- If you add new commands (lint/test/build), update this file.
+**Formatting**
+- 2-space indentation.
+- Double quotes; semicolons.
+- Wrap long JSX props; keep class strings readable.
+
+**Types & naming**
+- Prefer `type` aliases; avoid `any`.
+- Use explicit unions and nullable types (`string | null`).
+- camelCase for functions/vars; PascalCase for components/types.
+- Keep API field names in `snake_case` to match backend payloads.
+
+**App structure**
+- Centralize routes in `apps/web/src/App.tsx`.
+- Use React Query for async caching.
+- Centralize API calls in `apps/web/src/lib/api.ts`.
+
+**Styling**
+- Tailwind classes drive layout/colors; theme tokens in `apps/web/src/index.css`.
+
+## Cursor / Copilot Rules
+- No `.cursorrules`, `.cursor/rules/*`, or `.github/copilot-instructions.md` found in this repo.
+- If you add any, update this file to reflect them.
