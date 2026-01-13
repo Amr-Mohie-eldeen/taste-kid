@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 import docker
@@ -32,6 +33,8 @@ def _docker_available() -> bool:
 @pytest.fixture(scope="session")
 def postgres_container():
     if not _docker_available():
+        if os.getenv("REQUIRE_DOCKER_TESTS") == "1":
+            pytest.fail("Docker daemon not reachable; start Docker to run integration tests")
         pytest.skip("Docker daemon not reachable; start Docker to run integration tests")
 
     with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
