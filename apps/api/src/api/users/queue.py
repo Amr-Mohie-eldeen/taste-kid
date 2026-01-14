@@ -4,13 +4,13 @@ from sqlalchemy import text
 
 from api.config import USER_UNWATCHED_COOLDOWN_DAYS
 from api.db import get_engine
-from api.users.db import _ensure_user
+from api.users.db import ensure_user
 from api.users.recommendations import get_recommendations
 from api.users.types import FeedItem, NextMovie, RatingQueueItem
 
 
 def get_rating_queue(user_id: int, limit: int, offset: int = 0) -> list[RatingQueueItem]:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     engine = get_engine()
     q = text(
         """
@@ -128,7 +128,7 @@ def _get_next_from_popularity(user_id: int) -> NextMovie | None:
 
 
 def get_next_movie(user_id: int) -> NextMovie | None:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     next_movie = _get_next_from_recs(user_id)
     if next_movie:
         return next_movie
@@ -136,7 +136,7 @@ def get_next_movie(user_id: int) -> NextMovie | None:
 
 
 def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     engine = get_engine()
     q_profile = text("SELECT 1 FROM user_profiles WHERE user_id = :user_id")
     with engine.begin() as conn:

@@ -14,7 +14,7 @@ from api.config import (
 )
 from api.db import get_engine
 from api.rerank.scorer import build_context, score_candidate
-from api.users.db import _ensure_user
+from api.users.db import ensure_user
 from api.users.embeddings import (
     _build_weighted_embedding,
     _dislike_weight,
@@ -23,11 +23,11 @@ from api.users.embeddings import (
 from api.users.scoring import _build_user_dislike_context, _build_user_scoring_context
 from api.users.types import Recommendation
 
-logger = logging.getLogger("api.recommendations")
+logger = logging.getLogger("api")
 
 
 def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     engine = get_engine()
     q_profile = text("SELECT embedding AS embedding FROM user_profiles WHERE user_id = :user_id")
     with engine.begin() as conn:
@@ -55,38 +55,60 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     # The multiplier balances candidate diversity with query performance, but capped to prevent excessive load.
     fetch_limit = min(limit * RERANK_FETCH_MULTIPLIER, MAX_FETCH_CANDIDATES)
 
-    dislike_col = (
-        "(e.embedding <=> :dislike_embedding) AS dislike_distance"
-        if apply_dislike
-        else "NULL AS dislike_distance"
-    )
-
-    q = text(
-        f"""
-        SELECT m.id,
-               m.title,
-               m.release_date,
-               m.genres,
-               m.keywords,
-               m.runtime,
-               m.original_language,
-               m.vote_count,
-               m.poster_path,
-               m.backdrop_path,
-               (e.embedding <=> :embedding) AS distance,
-               {dislike_col}
-        FROM movie_embeddings e
-        JOIN movies m ON m.id = e.movie_id
-        LEFT JOIN user_movie_ratings r
-          ON r.movie_id = m.id
-         AND r.user_id = :user_id
-        WHERE r.movie_id IS NULL
-           OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
-        ORDER BY e.embedding <=> :embedding
-        LIMIT :limit
-        OFFSET :offset
-        """
-    )
+    if apply_dislike:
+        q = text(
+            """
+            SELECT m.id,
+                   m.title,
+                   m.release_date,
+                   m.genres,
+                   m.keywords,
+                   m.runtime,
+                   m.original_language,
+                   m.vote_count,
+                   m.poster_path,
+                   m.backdrop_path,
+                   (e.embedding <=> :embedding) AS distance,
+                   (e.embedding <=> :dislike_embedding) AS dislike_distance
+            FROM movie_embeddings e
+            JOIN movies m ON m.id = e.movie_id
+            LEFT JOIN user_movie_ratings r
+              ON r.movie_id = m.id
+             AND r.user_id = :user_id
+            WHERE r.movie_id IS NULL
+               OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
+            ORDER BY e.embedding <=> :embedding
+            LIMIT :limit
+            OFFSET :offset
+            """
+        )
+    else:
+        q = text(
+            """
+            SELECT m.id,
+                   m.title,
+                   m.release_date,
+                   m.genres,
+                   m.keywords,
+                   m.runtime,
+                   m.original_language,
+                   m.vote_count,
+                   m.poster_path,
+                   m.backdrop_path,
+                   (e.embedding <=> :embedding) AS distance,
+                   NULL AS dislike_distance
+            FROM movie_embeddings e
+            JOIN movies m ON m.id = e.movie_id
+            LEFT JOIN user_movie_ratings r
+              ON r.movie_id = m.id
+             AND r.user_id = :user_id
+            WHERE r.movie_id IS NULL
+               OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
+            ORDER BY e.embedding <=> :embedding
+            LIMIT :limit
+            OFFSET :offset
+            """
+        )
     params: dict[str, object] = {
         "user_id": user_id,
         "embedding": embedding,

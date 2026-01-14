@@ -6,7 +6,7 @@ from api.db import get_engine
 from api.users.types import MovieNotFoundError, UserNotFoundError, UserSummary
 
 
-def _ensure_user(user_id: int) -> None:
+def ensure_user(user_id: int) -> None:
     engine = get_engine()
     q = text("SELECT 1 FROM users WHERE id = :user_id")
     with engine.begin() as conn:
@@ -15,7 +15,7 @@ def _ensure_user(user_id: int) -> None:
         raise UserNotFoundError(f"User {user_id} not found")
 
 
-def _ensure_movie(movie_id: int) -> None:
+def ensure_movie(movie_id: int) -> None:
     engine = get_engine()
     q = text("SELECT 1 FROM movies WHERE id = :movie_id")
     with engine.begin() as conn:

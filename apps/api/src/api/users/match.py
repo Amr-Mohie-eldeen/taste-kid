@@ -3,13 +3,13 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from api.db import get_engine
-from api.users.db import _ensure_movie, _ensure_user
+from api.users.db import ensure_movie, ensure_user
 from api.users.types import UserMovieMatch
 
 
 def get_user_movie_match(user_id: int, movie_id: int) -> UserMovieMatch:
-    _ensure_user(user_id)
-    _ensure_movie(movie_id)
+    ensure_user(user_id)
+    ensure_movie(movie_id)
     engine = get_engine()
     q = text(
         """

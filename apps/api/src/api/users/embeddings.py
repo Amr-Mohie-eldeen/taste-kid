@@ -58,7 +58,7 @@ def _build_weighted_embedding(rows, weight_fn) -> list[float] | None:
     return [value / total_weight for value in totals]
 
 
-def _fetch_profile_embeddings(user_id: int):
+def _fetch_profile_embeddings(user_id: int) -> list:
     engine = get_engine()
     q = text(
         """
@@ -72,10 +72,10 @@ def _fetch_profile_embeddings(user_id: int):
         """
     )
     with engine.begin() as conn:
-        return conn.execute(q, {"user_id": user_id}).all()
+        return list(conn.execute(q, {"user_id": user_id}).all())
 
 
-def _fetch_disliked_embeddings(user_id: int):
+def _fetch_disliked_embeddings(user_id: int) -> list:
     engine = get_engine()
     q = text(
         """
@@ -89,4 +89,4 @@ def _fetch_disliked_embeddings(user_id: int):
         """
     )
     with engine.begin() as conn:
-        return conn.execute(q, {"user_id": user_id}).all()
+        return list(conn.execute(q, {"user_id": user_id}).all())

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from api.db import get_engine
-from api.users.db import _ensure_user
+from api.users.db import ensure_user
 from api.users.embeddings import (
     _build_weighted_embedding,
     _fetch_profile_embeddings,
@@ -14,7 +14,7 @@ from api.users.types import ProfileStats
 
 
 def recompute_profile(user_id: int) -> None:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     rows = _fetch_profile_embeddings(user_id)
     num_ratings = _count_watched_ratings(user_id)
     if not rows:
@@ -52,7 +52,7 @@ def recompute_profile(user_id: int) -> None:
 
 
 def get_profile_stats(user_id: int) -> ProfileStats:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     engine = get_engine()
     q = text(
         """

@@ -3,13 +3,13 @@ from __future__ import annotations
 from sqlalchemy import text
 
 from api.db import get_engine
-from api.users.db import _ensure_movie, _ensure_user
+from api.users.db import ensure_movie, ensure_user
 from api.users.types import RatedMovie
 
 
 def upsert_rating(user_id: int, movie_id: int, rating: int | None, status: str) -> None:
-    _ensure_user(user_id)
-    _ensure_movie(movie_id)
+    ensure_user(user_id)
+    ensure_movie(movie_id)
     engine = get_engine()
     q = text(
         """
@@ -64,7 +64,7 @@ def _count_liked_ratings(user_id: int) -> int:
 
 
 def get_user_ratings(user_id: int, limit: int, offset: int = 0) -> list[RatedMovie]:
-    _ensure_user(user_id)
+    ensure_user(user_id)
     engine = get_engine()
     q = text(
         """
