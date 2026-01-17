@@ -45,6 +45,7 @@ CREATE INDEX IF NOT EXISTS idx_movie_embeddings_embedding_hnsw_cosine
 CREATE INDEX IF NOT EXISTS idx_movies_language ON movies(original_language);
 CREATE INDEX IF NOT EXISTS idx_movies_adult ON movies(adult);
 CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies(release_date);
+CREATE INDEX IF NOT EXISTS idx_movies_vote_count_desc ON movies (vote_count DESC NULLS LAST, id DESC);
 
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
@@ -65,6 +66,7 @@ CREATE TABLE IF NOT EXISTS user_movie_ratings (
 
 CREATE INDEX IF NOT EXISTS idx_user_movie_ratings_user ON user_movie_ratings(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_movie_ratings_movie ON user_movie_ratings(movie_id);
+CREATE INDEX IF NOT EXISTS idx_user_movie_ratings_user_updated_desc ON user_movie_ratings (user_id, updated_at DESC);
 
 -- NOTE: update vector dimension if embedding model changes.
 CREATE TABLE IF NOT EXISTS user_profiles (
