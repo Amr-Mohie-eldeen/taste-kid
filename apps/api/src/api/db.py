@@ -7,7 +7,15 @@ from pgvector.psycopg import register_vector
 from sqlalchemy import create_engine, event
 from sqlalchemy.engine import Engine
 
-from api.config import DATABASE_URL, LOG_DB_SLOW_QUERY_MS
+from api.config import (
+    DATABASE_URL,
+    DB_MAX_OVERFLOW,
+    DB_POOL_RECYCLE_S,
+    DB_POOL_SIZE,
+    DB_POOL_TIMEOUT_S,
+    DB_STATEMENT_TIMEOUT_MS,
+    LOG_DB_SLOW_QUERY_MS,
+)
 
 _ENGINE: Engine | None = None
 _logger = logging.getLogger("db")
@@ -16,11 +24,22 @@ _logger = logging.getLogger("db")
 def get_engine() -> Engine:
     global _ENGINE
     if _ENGINE is None:
-        _ENGINE = create_engine(DATABASE_URL, pool_pre_ping=True)
+        _ENGINE = create_engine(
+            DATABASE_URL,
+            pool_pre_ping=True,
+            pool_size=DB_POOL_SIZE,
+            max_overflow=DB_MAX_OVERFLOW,
+            pool_timeout=DB_POOL_TIMEOUT_S,
+            pool_recycle=DB_POOL_RECYCLE_S,
+        )
 
         @event.listens_for(_ENGINE, "connect")
         def _on_connect(dbapi_conn, _):
             register_vector(dbapi_conn)
+            if DB_STATEMENT_TIMEOUT_MS > 0:
+                cursor = dbapi_conn.cursor()
+                cursor.execute("SET statement_timeout = %s", (DB_STATEMENT_TIMEOUT_MS,))
+                cursor.close()
 
         @event.listens_for(_ENGINE, "before_cursor_execute")
         def _before_cursor_execute(conn, _cursor, _statement, _parameters, _context, _executemany):
