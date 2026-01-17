@@ -21,13 +21,41 @@ export function useProfileStats(userId: number | null) {
 
 export function useCreateUser() {
   const queryClient = useQueryClient();
-  const { setUserId } = useStore();
-  
+  const { setUserId, setToken } = useStore();
+
   return useMutation({
-    mutationFn: (name: string | null) => api.createUser(name),
+    mutationFn: ({
+      email,
+      password,
+      displayName,
+    }: {
+      email: string;
+      password: string;
+      displayName: string | null;
+    }) => api.register(email, password, displayName),
     onSuccess: (data) => {
-      setUserId(data.id);
-      queryClient.invalidateQueries({ queryKey: ["userSummary", data.id] });
+      setUserId(data.user.id);
+      setToken(data.access_token);
+      queryClient.invalidateQueries({ queryKey: ["userSummary", data.user.id] });
+    },
+  });
+}
+
+export function useLogin() {
+  const queryClient = useQueryClient();
+  const { setUserId, setToken } = useStore();
+
+  return useMutation({
+    mutationFn: ({ email, password }: { email: string; password: string }) => api.login(email, password),
+    onSuccess: (data) => {
+      setUserId(data.user.id);
+      setToken(data.access_token);
+      queryClient.invalidateQueries({ queryKey: ["userSummary", data.user.id] });
+      queryClient.invalidateQueries({ queryKey: ["profileStats", data.user.id] });
+      queryClient.invalidateQueries({ queryKey: ["feed", data.user.id] });
+      queryClient.invalidateQueries({ queryKey: ["ratings", data.user.id] });
+      queryClient.invalidateQueries({ queryKey: ["ratingQueue", data.user.id] });
+      queryClient.invalidateQueries({ queryKey: ["nextMovie", data.user.id] });
     },
   });
 }

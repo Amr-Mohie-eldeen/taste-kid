@@ -1,6 +1,7 @@
 import os
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
 
 import pytest
@@ -187,3 +188,17 @@ def seeded_movies(db_engine, embedding_dim):
 async def client(db_session):  # noqa: ARG001
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+
+@pytest_asyncio.fixture
+async def authed_user(client: AsyncClient) -> tuple[int, dict[str, str]]:
+    email = f"test-{uuid.uuid4()}@example.com"
+    resp = await client.post(
+        "/v1/auth/register",
+        json={"email": email, "password": "password123", "display_name": "Test"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()["data"]
+    user_id = int(data["user"]["id"])
+    token = data["access_token"]
+    return user_id, {"Authorization": f"Bearer {token}"}
