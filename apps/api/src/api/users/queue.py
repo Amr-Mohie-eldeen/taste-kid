@@ -50,6 +50,7 @@ def get_rating_queue(user_id: int, limit: int, offset: int = 0) -> list[RatingQu
 
 def _get_next_from_recs(user_id: int) -> NextMovie | None:
     engine = get_engine()
+    q_embedding = text("SELECT embedding FROM user_profiles WHERE user_id = :user_id")
     q = text(
         """
         SELECT m.id,
@@ -58,35 +59,39 @@ def _get_next_from_recs(user_id: int) -> NextMovie | None:
                m.genres,
                m.poster_path,
                m.backdrop_path
-        FROM user_profiles p
-        JOIN movie_embeddings e ON TRUE
+        FROM movie_embeddings e
         JOIN movies m ON m.id = e.movie_id
         LEFT JOIN user_movie_ratings r
           ON r.movie_id = m.id
          AND r.user_id = :user_id
-        WHERE p.user_id = :user_id
-          AND (
-            r.movie_id IS NULL
-            OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
-          )
-        ORDER BY e.embedding <=> p.embedding
+        WHERE r.movie_id IS NULL
+           OR (r.status = 'unwatched' AND r.updated_at < now() - make_interval(days => :cooldown_days))
+        ORDER BY e.embedding <=> :embedding
         LIMIT 1
         """
     )
+
     with engine.begin() as conn:
+        embedding = conn.execute(q_embedding, {"user_id": user_id}).scalar()
+        if embedding is None:
+            return None
+
         row = (
             conn.execute(
                 q,
                 {
                     "user_id": user_id,
                     "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+                    "embedding": embedding,
                 },
             )
             .mappings()
             .first()
         )
+
     if not row:
         return None
+
     return NextMovie(source="profile", **row)
 
 
