@@ -9,7 +9,13 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette import status
 
-from api.config import FRONTEND_ORIGINS, LOG_REQUEST_SAMPLE_RATE, LOG_SLOW_REQUEST_MS
+from api.config import (
+    ENABLE_HSTS,
+    FRONTEND_ORIGINS,
+    LOG_REQUEST_SAMPLE_RATE,
+    LOG_SLOW_REQUEST_MS,
+    MAX_REQUEST_BYTES,
+)
 from api.logging_config import configure_logging
 from api.logging_context import request_id_ctx
 from api.similarity import EmbeddingNotFoundError
@@ -24,19 +30,45 @@ app = FastAPI(title="TMDB RecSys API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=FRONTEND_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    max_age=600,
 )
 
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def harden_and_log_requests(request: Request, call_next):
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
     request_id_ctx.set(request_id)
+
+    if MAX_REQUEST_BYTES > 0:
+        content_length = request.headers.get("content-length")
+        if content_length is not None:
+            try:
+                length = int(content_length)
+            except ValueError:
+                length = -1
+            if length > MAX_REQUEST_BYTES:
+                return _error_response(
+                    status.HTTP_413_CONTENT_TOO_LARGE,
+                    "PAYLOAD_TOO_LARGE",
+                    "Request body too large",
+                )
+
     start = time.perf_counter()
     response = await call_next(request)
     duration_ms = (time.perf_counter() - start) * 1000
+
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    if ENABLE_HSTS:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+
     log_payload = {
         "method": request.method,
         "path": request.url.path,
@@ -51,7 +83,7 @@ async def log_requests(request: Request, call_next):
         logger.info("request_complete", extra=log_payload | {"sampled": True})
     else:
         logger.debug("request_complete", extra=log_payload)
-    response.headers["X-Request-ID"] = request_id
+
     return response
 
 
@@ -74,6 +106,7 @@ _STATUS_CODE_MAP = {
     status.HTTP_403_FORBIDDEN: "FORBIDDEN",
     status.HTTP_404_NOT_FOUND: "NOT_FOUND",
     status.HTTP_409_CONFLICT: "CONFLICT",
+    status.HTTP_413_CONTENT_TOO_LARGE: "PAYLOAD_TOO_LARGE",
     status.HTTP_422_UNPROCESSABLE_CONTENT: "VALIDATION_ERROR",
 }
 
