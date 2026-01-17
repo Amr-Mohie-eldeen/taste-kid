@@ -1,4 +1,5 @@
 CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
 
 CREATE TABLE IF NOT EXISTS movies (
   id BIGINT PRIMARY KEY,
@@ -46,6 +47,8 @@ CREATE INDEX IF NOT EXISTS idx_movies_language ON movies(original_language);
 CREATE INDEX IF NOT EXISTS idx_movies_adult ON movies(adult);
 CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies(release_date);
 CREATE INDEX IF NOT EXISTS idx_movies_vote_count_desc ON movies (vote_count DESC NULLS LAST, id DESC);
+CREATE INDEX IF NOT EXISTS idx_movies_title_trgm ON movies USING GIN (title gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS idx_movies_original_title_trgm ON movies USING GIN (original_title gin_trgm_ops);
 
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
