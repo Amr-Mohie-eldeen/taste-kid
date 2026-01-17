@@ -285,35 +285,25 @@ async def test_dislike_isolation(client: AsyncClient, seeded_movies, db_engine):
 
 @pytest.mark.asyncio
 async def test_feed_source_switching(client: AsyncClient, seeded_movies):  # noqa: ARG001
-    """
-    Verify feed source switches from 'popularity' to 'profile'
-    once the user has a profile.
-    """
+    """Verify feed source switches from 'popularity' to 'profile'."""
     create_resp = await client.post("/v1/users", json={"display_name": "Feed User"})
     user_id = create_resp.json()["data"]["id"]
 
-    # 1. Cold start: expect popularity
     resp = await client.get(f"/v1/users/{user_id}/feed")
     assert resp.status_code == 200
     feed = resp.json()["data"]
-    # We might not get items if seeded_movies are few and logic filters them,
-    # but based on seeded_movies we have 3 items.
     assert len(feed) > 0
     assert feed[0]["source"] == "popularity"
 
-    # 2. Rate a movie to create profile
     await client.put(
         f"/v1/users/{user_id}/ratings/{seeded_movies['inception_id']}",
         json={"rating": 5},
     )
 
-    # 3. Established user: expect profile
     resp = await client.get(f"/v1/users/{user_id}/feed")
     assert resp.status_code == 200
     feed = resp.json()["data"]
     assert len(feed) > 0
-    # Note: Movie 1 is now rated, so it might be excluded depending on logic,
-    # but we have Movie 2 and 3.
     assert feed[0]["source"] == "profile"
 
 
