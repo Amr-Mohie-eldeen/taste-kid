@@ -37,6 +37,11 @@ CREATE TABLE IF NOT EXISTS movie_embeddings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS idx_movie_embeddings_embedding_hnsw_cosine
+  ON movie_embeddings
+  USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
+
 CREATE INDEX IF NOT EXISTS idx_movies_language ON movies(original_language);
 CREATE INDEX IF NOT EXISTS idx_movies_adult ON movies(adult);
 CREATE INDEX IF NOT EXISTS idx_movies_release_date ON movies(release_date);
