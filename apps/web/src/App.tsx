@@ -10,7 +10,7 @@ import { useStore } from "./lib/store";
 import { queryClient } from "./lib/queryClient";
 
 export default function App() {
-  const { setApiStatus, setUserId, userId } = useStore();
+  const { resetSession, setApiStatus, setUserId, token, userId } = useStore();
 
   useEffect(() => {
     api
@@ -18,6 +18,12 @@ export default function App() {
       .then(() => setApiStatus("online"))
       .catch(() => setApiStatus("offline"));
   }, [setApiStatus]);
+
+  useEffect(() => {
+    if (userId && !token) {
+      resetSession();
+    }
+  }, [resetSession, token, userId]);
 
   return (
     <QueryClientProvider client={queryClient}>

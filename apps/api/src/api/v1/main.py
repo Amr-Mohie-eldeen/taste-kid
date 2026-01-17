@@ -1,9 +1,18 @@
 from datetime import date
 from typing import Any, Generic, TypeVar
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from api.auth.db import (
+    EmailAlreadyRegisteredError,
+    InvalidCredentialsError,
+    authenticate_user,
+    register_user,
+)
+from api.auth.deps import get_current_user_id, require_user_access
+from api.auth.jwt import create_access_token
+from api.auth.passwords import hash_password
 from api.config import (
     SIM_CANDIDATES_K,
     SIM_RERANK_ENABLED,
@@ -115,11 +124,28 @@ class UserCreateRequest(BaseModel):
     display_name: str | None = None
 
 
+class AuthRegisterRequest(BaseModel):
+    email: str
+    password: str = Field(min_length=8)
+    display_name: str | None = None
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
 class UserSummaryResponse(BaseModel):
     id: int
     display_name: str | None
     num_ratings: int
     profile_updated_at: str | None
+
+
+class AuthTokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserSummaryResponse
 
 
 class RatingRequest(BaseModel):
@@ -262,6 +288,44 @@ def movie_detail(movie_id: int):
     return _envelope(MovieDetailResponse(**payload))
 
 
+@router.post("/auth/register", response_model=ResponseEnvelope[AuthTokenResponse])
+def register(payload: AuthRegisterRequest):
+    try:
+        user_id = register_user(
+            email=payload.email,
+            password_hash=hash_password(payload.password),
+            display_name=payload.display_name,
+        )
+    except EmailAlreadyRegisteredError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    summary = get_user_summary(user_id)
+    token = create_access_token(user_id=user_id)
+    return _envelope(
+        AuthTokenResponse(access_token=token, user=UserSummaryResponse(**summary.__dict__))
+    )
+
+
+@router.post("/auth/login", response_model=ResponseEnvelope[AuthTokenResponse])
+def login(payload: AuthLoginRequest):
+    try:
+        user_id = authenticate_user(email=payload.email, password=payload.password)
+    except InvalidCredentialsError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+    summary = get_user_summary(user_id)
+    token = create_access_token(user_id=user_id)
+    return _envelope(
+        AuthTokenResponse(access_token=token, user=UserSummaryResponse(**summary.__dict__))
+    )
+
+
+@router.get("/auth/me", response_model=ResponseEnvelope[UserSummaryResponse])
+def auth_me(current_user_id: int = Depends(get_current_user_id)):
+    summary = get_user_summary(current_user_id)
+    return _envelope(UserSummaryResponse(**summary.__dict__))
+
+
 @router.post("/users", response_model=ResponseEnvelope[UserSummaryResponse])
 def create_user_profile(payload: UserCreateRequest):
     user_id = create_user(payload.display_name)
@@ -270,18 +334,27 @@ def create_user_profile(payload: UserCreateRequest):
 
 
 @router.get("/users/{user_id}", response_model=ResponseEnvelope[UserSummaryResponse])
-def get_user_profile(user_id: int):
+def get_user_profile(user_id: int, _auth: int = Depends(require_user_access)):
     summary = get_user_summary(user_id)
     return _envelope(UserSummaryResponse(**summary.__dict__))
 
 
 @router.put("/users/{user_id}/ratings/{movie_id}", response_model=ResponseEnvelope[dict[str, str]])
-def rate_movie(user_id: int, movie_id: int, payload: RatingRequest):
+def rate_movie(
+    user_id: int,
+    movie_id: int,
+    payload: RatingRequest,
+    _auth: int = Depends(require_user_access),
+):
     return _process_rating(user_id, movie_id, payload.rating, payload.status)
 
 
 @router.post("/users/{user_id}/rate", response_model=ResponseEnvelope[dict[str, str]])
-def rate_movie_simple(user_id: int, payload: RateMovieRequest):
+def rate_movie_simple(
+    user_id: int,
+    payload: RateMovieRequest,
+    _auth: int = Depends(require_user_access),
+):
     return _process_rating(user_id, payload.movie_id, payload.rating, payload.status)
 
 
@@ -293,6 +366,7 @@ def user_recommendations(
     user_id: int,
     k: int = Query(default=20, ge=1, le=100),
     cursor: int = Query(default=0, ge=0),
+    _auth: int = Depends(require_user_access),
 ):
     recs = get_recommendations(user_id, k + 1, cursor)
     page_recs, meta = _paginate(recs, cursor, k)
@@ -306,6 +380,7 @@ def rating_queue(
     user_id: int,
     k: int = Query(default=20, ge=1, le=100),
     cursor: int = Query(default=0, ge=0),
+    _auth: int = Depends(require_user_access),
 ):
     queue = get_rating_queue(user_id, k + 1, cursor)
     page_queue, meta = _paginate(queue, cursor, k)
@@ -317,6 +392,7 @@ def user_ratings(
     user_id: int,
     k: int = Query(default=20, ge=1, le=100),
     cursor: int = Query(default=0, ge=0),
+    _auth: int = Depends(require_user_access),
 ):
     ratings = get_user_ratings(user_id, k + 1, cursor)
     page_ratings, meta = _paginate(ratings, cursor, k)
@@ -324,13 +400,13 @@ def user_ratings(
 
 
 @router.get("/users/{user_id}/profile", response_model=ResponseEnvelope[ProfileStatsResponse])
-def profile_stats(user_id: int):
+def profile_stats(user_id: int, _auth: int = Depends(require_user_access)):
     stats = get_profile_stats(user_id)
     return _envelope(ProfileStatsResponse(**stats.__dict__))
 
 
 @router.get("/users/{user_id}/next", response_model=ResponseEnvelope[NextMovieResponse])
-def next_movie(user_id: int):
+def next_movie(user_id: int, _auth: int = Depends(require_user_access)):
     movie = get_next_movie(user_id)
     if movie is None:
         raise HTTPException(status_code=404, detail="No more unrated movies")
@@ -342,6 +418,7 @@ def user_feed(
     user_id: int,
     k: int = Query(default=20, ge=1, le=100),
     cursor: int = Query(default=0, ge=0),
+    _auth: int = Depends(require_user_access),
 ):
     items = get_feed(user_id, k + 1, cursor)
     page_items, meta = _paginate(items, cursor, k)
@@ -352,6 +429,10 @@ def user_feed(
     "/users/{user_id}/movies/{movie_id}/match",
     response_model=ResponseEnvelope[UserMovieMatchResponse],
 )
-def user_movie_match(user_id: int, movie_id: int):
+def user_movie_match(
+    user_id: int,
+    movie_id: int,
+    _auth: int = Depends(require_user_access),
+):
     match = get_user_movie_match(user_id, movie_id)
     return _envelope(UserMovieMatchResponse(**match.__dict__))

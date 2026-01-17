@@ -1,3 +1,5 @@
+import { useStore } from "./store";
+
 const API_BASE_URL = (import.meta.env.VITE_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 const API_URL = API_BASE_URL.endsWith("/v1") ? API_BASE_URL : `${API_BASE_URL}/v1`;
 
@@ -6,6 +8,12 @@ export type UserSummary = {
   display_name: string | null;
   num_ratings: number;
   profile_updated_at: string | null;
+};
+
+export type AuthTokenResponse = {
+  access_token: string;
+  token_type: string;
+  user: UserSummary;
 };
 
 export type MovieLookup = { id: number; title: string | null };
@@ -146,9 +154,19 @@ async function request<T>(path: string, options?: RequestInit): Promise<T | unde
 }
 
 async function fetchEnvelope<T>(path: string, options?: RequestInit): Promise<ApiSuccess<T> | undefined> {
+  const { token } = useStore.getState();
+
+  const headers = new Headers(options?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+  if (token) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+
   const response = await fetch(`${API_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers,
   });
 
   const rawText = await response.text();
@@ -202,6 +220,17 @@ async function requestPaginated<T>(path: string, options?: RequestInit): Promise
 
 export const api = {
   health: () => request<{ status: string }>("/health"),
+  register: (email: string, password: string, display_name: string | null) =>
+    request<AuthTokenResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, display_name }),
+    }),
+  login: (email: string, password: string) =>
+    request<AuthTokenResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  me: () => request<UserSummary>("/auth/me"),
   createUser: (display_name: string | null) =>
     request<UserSummary>("/users", {
       method: "POST",

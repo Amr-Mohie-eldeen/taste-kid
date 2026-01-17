@@ -8,6 +8,7 @@ import {
   useNextMovie,
   useRateMovie,
   useCreateUser,
+  useLogin,
   useMovieSearch,
 } from "../lib/hooks";
 import { Button } from "../components/ui/button";
@@ -23,15 +24,17 @@ import { Rate } from "./Dashboard/Rate";
 // Discovery tab removed
 import { Ratings } from "./Dashboard/Ratings";
 import { Search } from "./Dashboard/Search";
-import { 
-  UserPlus, 
-  LogIn, 
-  LayoutDashboard, 
-  Star, 
-  History, 
+import {
+  History,
+  LayoutDashboard,
+  LogIn,
   Search as SearchIcon,
-  Zap
+  Star,
+  UserPlus,
+  Zap,
 } from "lucide-react";
+
+import { useStore } from "../lib/store";
 
 type DashboardProps = {
   userId: number | null;
@@ -39,8 +42,12 @@ type DashboardProps = {
 };
 
 export function Dashboard({ userId, setUserId }: DashboardProps) {
+  const resetSession = useStore((state) => state.resetSession);
   const [displayName, setDisplayName] = useState("");
-  const [existingUserId, setExistingUserId] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [activeTab, setActiveTab] = useState("feed");
   
   const feedPageSize = 20;
@@ -84,6 +91,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
 
   // Mutations
   const createUser = useCreateUser();
+  const login = useLogin();
   const rateMovie = useRateMovie();
 
   const feedItems = useMemo(
@@ -148,14 +156,18 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   };
 
   const handleCreateUser = () => {
-    createUser.mutate(displayName.trim() || null);
+    createUser.mutate({
+      email: registerEmail.trim(),
+      password: registerPassword,
+      displayName: displayName.trim() || null,
+    });
   };
 
-  const handleUseExisting = () => {
-    const id = Number(existingUserId);
-    if (!Number.isFinite(id) || id <= 0) return;
-    setUserId(id);
-    localStorage.setItem("tastekid:userId", id.toString());
+  const handleLogin = () => {
+    login.mutate({
+      email: loginEmail.trim(),
+      password: loginPassword,
+    });
   };
 
   const handleRateMovie = (movieId: number, rating: number | null, status: string) => {
@@ -267,6 +279,19 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Input
+                    placeholder="Email"
+                    value={registerEmail}
+                    onChange={(event) => setRegisterEmail(event.target.value)}
+                    className="h-10 rounded-xl bg-background border-border/60"
+                  />
+                  <Input
+                    placeholder="Password"
+                    type="password"
+                    value={registerPassword}
+                    onChange={(event) => setRegisterPassword(event.target.value)}
+                    className="h-10 rounded-xl bg-background border-border/60"
+                  />
+                  <Input
                     placeholder="Identity Name"
                     value={displayName}
                     onChange={(event) => setDisplayName(event.target.value)}
@@ -278,7 +303,7 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                     className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
                   >
                     <UserPlus className="h-4 w-4" />
-                    Generate Identity
+                    Create Account
                   </Button>
                 </div>
                 <div className="relative py-2">
@@ -291,18 +316,26 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                 </div>
                 <div className="space-y-2">
                   <Input
-                    placeholder="Existing ID"
-                    value={existingUserId}
-                    onChange={(event) => setExistingUserId(event.target.value)}
+                    placeholder="Email"
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.target.value)}
+                    className="h-10 rounded-xl bg-background border-border/60"
+                  />
+                  <Input
+                    placeholder="Password"
+                    type="password"
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
                     className="h-10 rounded-xl bg-background border-border/60"
                   />
                   <Button 
                     variant="secondary" 
-                    onClick={handleUseExisting}
+                    onClick={handleLogin}
+                    disabled={login.isPending}
                     className="w-full h-10 rounded-xl gap-2 font-bold"
                   >
                     <LogIn className="h-4 w-4" />
-                    Resume Session
+                    Sign In
                   </Button>
                 </div>
                 {summaryError && (
@@ -343,12 +376,13 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     Last Synced: {profileStats?.updated_at ? formatDate(profileStats.updated_at) : "Never"}
                   </p>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setUserId(null)}
-                    className="mt-4 text-[10px] h-7 font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
-                  >
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={() => resetSession()}
+                      className="mt-4 text-[10px] h-7 font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
+                    >
+
                     Terminate Session
                   </Button>
                 </div>
