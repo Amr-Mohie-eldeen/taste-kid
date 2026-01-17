@@ -1,4 +1,5 @@
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -11,6 +12,18 @@ from testcontainers.postgres import PostgresContainer
 
 import api.db
 from api.main import app
+
+
+def _docker_available() -> bool:
+    if shutil.which("docker") is None:
+        return False
+
+    try:
+        subprocess.check_output(["docker", "info"], stderr=subprocess.STDOUT, text=True)
+    except Exception:
+        return False
+
+    return True
 
 
 def _ensure_docker_host_env() -> None:
@@ -33,6 +46,9 @@ def _ensure_docker_host_env() -> None:
 def postgres_container():
     _ensure_docker_host_env()
     os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
+
+    if not _docker_available():
+        pytest.skip("Docker is required for integration tests")
 
     with PostgresContainer("pgvector/pgvector:pg16", driver="psycopg") as postgres:
         yield postgres

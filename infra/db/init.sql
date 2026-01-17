@@ -70,27 +70,3 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Align user_profiles.embedding dimension with movie_embeddings.embedding
-DO $$
-DECLARE
-  dims INT;
-BEGIN
-  SELECT vector_dims(embedding) INTO dims
-  FROM movie_embeddings
-  LIMIT 1;
-
-  IF dims IS NULL THEN
-    SELECT a.atttypmod - 4 INTO dims
-    FROM pg_attribute a
-    JOIN pg_class c ON c.oid = a.attrelid
-    JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE c.relname = 'movie_embeddings'
-      AND a.attname = 'embedding'
-      AND n.nspname = 'public';
-  END IF;
-
-  IF dims IS NOT NULL THEN
-    EXECUTE 'TRUNCATE TABLE user_profiles';
-    EXECUTE format('ALTER TABLE user_profiles ALTER COLUMN embedding TYPE vector(%s)', dims);
-  END IF;
-END $$;
