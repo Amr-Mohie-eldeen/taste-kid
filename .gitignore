@@ -17,6 +17,8 @@ __pycache__/
 # Node (if/when you add web)
 node_modules/
 dist/
+*.tsbuildinfo
+apps/web/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store
