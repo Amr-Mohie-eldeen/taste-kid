@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
-import { Loader2, Film, CheckCircle2 } from "lucide-react";
+import { Loader2, Film } from "lucide-react";
 import { ensureLoggedIn } from "../lib/oidc";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -35,8 +35,8 @@ export function Signup() {
   });
 
   const onSubmit = async (data: SignupForm) => {
+    void data;
     setSuccess(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
     await ensureLoggedIn({ action: "register" });
   };
 
@@ -44,16 +44,8 @@ export function Signup() {
     return (
       <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 text-center">
         <div className="flex max-w-md flex-col items-center space-y-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-500">
-            <CheckCircle2 className="h-8 w-8" />
-          </div>
-          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            Account Created
-          </h2>
-          <p className="text-zinc-500 dark:text-zinc-400">
-            Finishing setup...
-          </p>
           <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+          <p className="text-zinc-500 dark:text-zinc-400">Redirecting to Keycloak registration...</p>
         </div>
       </div>
     );

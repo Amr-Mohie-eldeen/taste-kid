@@ -4,7 +4,7 @@ import { LogOut, User as UserIcon } from "lucide-react";
 import { useProfileStats, useUserSummary } from "../lib/hooks";
 import { useStore } from "../lib/store";
 import { queryClient } from "../lib/queryClient";
-import { logout } from "../lib/oidc";
+import { ensureLoggedIn, logout } from "../lib/oidc";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { StatCard } from "../components/StatCard";
@@ -27,12 +27,16 @@ export function ProfilePage() {
           Sign in to save your ratings and keep your recommendations in sync.
         </p>
         <div className="mt-6 flex w-full max-w-sm gap-3">
-          <Button asChild className="w-full">
-            <Link to="/login">Sign in</Link>
-          </Button>
-          <Button asChild variant="secondary" className="w-full">
-            <Link to="/signup">Create account</Link>
-          </Button>
+           <Button className="w-full" onClick={() => void ensureLoggedIn({ action: "login" })}>
+             Sign in
+           </Button>
+           <Button
+             variant="secondary"
+             className="w-full"
+             onClick={() => void ensureLoggedIn({ action: "register" })}
+           >
+             Create account
+           </Button>
         </div>
       </div>
     );
