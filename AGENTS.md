@@ -11,7 +11,7 @@ This file is guidance for agentic coding tools operating in this repo.
 
 ### Full stack (Docker Compose, repo root)
 - `make setup` (creates `.env` from `.env.example` if missing)
-- `make build` (build + start everything)
+- `make build` (build + start everything, including Keycloak)
 - `make up` / `make down` / `make restart`
 - `make logs` / `make logs-api` / `make logs-web` / `make logs-db`
 
@@ -32,6 +32,30 @@ This file is guidance for agentic coding tools operating in this repo.
 - `uv run python src/ingest.py`
 - `uv run python src/embed_movies.py`
 - `uv run python src/reset_embeddings.py`
+
+## Authentication (Keycloak / OIDC)
+
+This repo uses Keycloak for OIDC authentication.
+
+Dev URLs:
+- Web: `http://localhost:5173`
+- API: `http://localhost:8000`
+- Keycloak: `http://localhost:8080` (admin: `admin` / `admin`)
+
+Important topology detail:
+- Browser/web use the public issuer `http://localhost:8080/realms/taste-kid`.
+- The API container fetches JWKS from the internal docker hostname `http://keycloak:8080/...`.
+
+Behavior:
+- Web redirects to Keycloak for login and registration.
+- API verifies RS256 JWTs via JWKS.
+- `/v1/auth/login` and `/v1/auth/register` return `410 Gone` when Keycloak is enabled.
+- OIDC `sub` is mapped to internal `users.id` via `user_identities`.
+
+## Database bootstrap
+
+- Schema bootstrap SQL is in `infra/db/init.sql` (only runs on fresh Postgres volumes).
+- The API also runs idempotent startup DDL to ensure required tables exist (for example `user_identities`) without wiping existing data.
 
 ## Running a Single Test (API)
 
