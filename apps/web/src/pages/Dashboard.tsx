@@ -11,6 +11,8 @@ import {
   useLogin,
   useMovieSearch,
 } from "../lib/hooks";
+import { ensureLoggedIn, logout } from "../lib/oidc";
+import { queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -32,6 +34,8 @@ import {
   Star,
   UserPlus,
   Zap,
+  User,
+  LogOut,
 } from "lucide-react";
 
 import { useStore } from "../lib/store";
@@ -42,7 +46,7 @@ type DashboardProps = {
 };
 
 export function Dashboard({ userId, setUserId }: DashboardProps) {
-  const resetSession = useStore((state) => state.resetSession);
+  const { resetSession, userProfile } = useStore();
   const [activeTab, setActiveTab] = useState("feed");
   
   const feedPageSize = 20;
@@ -154,9 +158,9 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     rateMovie.mutate({ userId, movieId, rating, status });
   };
 
-  const ratingsCount = ratingsItems.filter((r) => r.status === "watched").length
-    || userSummary?.num_ratings
-    || 0;
+  const ratingsCount = userSummary?.num_ratings
+    ?? profileStats?.num_ratings
+    ?? ratingsItems.filter((r) => r.status === "watched" && r.rating !== null).length;
   
   const gridClass = useMemo(
     () => "grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3",
@@ -257,23 +261,19 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               </CardHeader>
               <CardContent className="space-y-3">
                 <Button
-                  asChild
+                  onClick={() => ensureLoggedIn({ action: "login" })}
                   className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
                 >
-                  <a href="/login">
-                    <LogIn className="h-4 w-4" />
-                    Continue with Login
-                  </a>
+                  <LogIn className="h-4 w-4" />
+                  Continue with Login
                 </Button>
                 <Button
                   variant="secondary"
-                  asChild
+                  onClick={() => ensureLoggedIn({ action: "register" })}
                   className="w-full h-10 rounded-xl gap-2 font-bold"
                 >
-                  <a href="/signup">
-                    <UserPlus className="h-4 w-4" />
-                    Create Account
-                  </a>
+                  <UserPlus className="h-4 w-4" />
+                  Create Account
                 </Button>
                 {summaryError && (
                   <p className="text-[11px] font-medium text-destructive bg-destructive/5 p-2 rounded-lg border border-destructive/10 text-center">
@@ -284,44 +284,53 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
             </Card>
           ) : (
             <Card className="border-border/40 shadow-sm rounded-3xl overflow-hidden">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  <Zap className="h-4 w-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Profile Status</span>
+              <CardHeader className="pb-4 relative">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <User className="h-4 w-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Your Profile</span>
+                  </div>
+                   <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      resetSession();
+                      queryClient.clear();
+                      try {
+                        await logout({ redirectTo: "home" });
+                      } catch {
+                        window.location.assign("/");
+                      }
+                    }}
+                    className="h-8 w-8 p-0 rounded-full text-muted-foreground hover:text-destructive absolute right-4 top-4"
+                    title="Sign out"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
                 </div>
-                <CardTitle className="text-xl">Taste Metrics</CardTitle>
-                <CardDescription className="text-xs">Real-time profile vector analysis.</CardDescription>
+                
+                <CardTitle className="text-xl truncate pr-8">
+                  {userProfile?.name || userProfile?.email || "My Account"}
+                </CardTitle>
+                <CardDescription className="text-xs truncate">
+                  {userProfile?.name ? userProfile.email : "Real-time profile vector analysis."}
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3">
                 <StatCard 
-                  label="Computed Ratings" 
+                  label="Ratings" 
                   value={ratingsCount} 
                   className="rounded-2xl"
                 />
                 <StatCard 
-                  label="Liked Patterns" 
+                  label="Favorites" 
                   value={profileStats?.num_liked ?? 0} 
-                  className="rounded-2xl"
-                />
-                <StatCard 
-                  label="Vector Norm" 
-                  value={profileStats?.embedding_norm?.toFixed(3)} 
-                  hint="Confidence"
                   className="rounded-2xl"
                 />
                 <div className="mt-2 text-center">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     Last Synced: {profileStats?.updated_at ? formatDate(profileStats.updated_at) : "Never"}
                   </p>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => resetSession()}
-                      className="mt-4 text-[10px] h-7 font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
-                    >
-
-                    Terminate Session
-                  </Button>
                 </div>
               </CardContent>
             </Card>

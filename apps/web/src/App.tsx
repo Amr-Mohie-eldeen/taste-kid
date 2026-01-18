@@ -24,8 +24,8 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
-      const { getAccessToken } = await import("./lib/oidc");
+    void (async () => {
+      const { getAccessToken, oidc } = await import("./lib/oidc");
       const accessToken = await getAccessToken();
 
       if (cancelled) {
@@ -33,47 +33,44 @@ export default function App() {
       }
 
       if (!accessToken) {
-        if (token) {
+        if (token || userId) {
           resetSession();
         }
         return;
       }
 
       setToken(accessToken);
+
       try {
+        const oidcState = await oidc.getOidc();
+        if (oidcState.isUserLoggedIn) {
+          const decoded = oidcState.getDecodedIdToken();
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const profile = decoded as any;
+          useStore.getState().setUserProfile({
+            name: profile.name,
+            email: profile.email,
+            preferred_username: profile.preferred_username,
+          });
+        }
+
         const me = await api.me();
-        setUserId(me.id);
-      } catch {
-        setUserId(null);
-      }
-    })();
-
-    const interval = window.setInterval(() => {
-      void (async () => {
-        const { getAccessToken } = await import("./lib/oidc");
-        const accessToken = await getAccessToken();
-
         if (cancelled) {
           return;
         }
-
-        if (!accessToken) {
-          resetSession();
+        setUserId(me.id);
+      } catch {
+        if (cancelled) {
           return;
         }
-
-        if (!token) {
-          setToken(accessToken);
-          return;
-        }
-      })();
-    }, 30000);
+        resetSession();
+      }
+    })();
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
     };
-  }, [resetSession, setToken, setUserId, token]);
+  }, [resetSession, setToken, setUserId, token, userId]);
 
   return (
     <QueryClientProvider client={queryClient}>

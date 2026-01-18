@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ensureLoggedIn } from "../lib/oidc";
+import { ensureLoggedIn, getAccessToken } from "../lib/oidc";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 
@@ -13,25 +13,26 @@ export function Login() {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const to = params.get("to");
-    if (to) {
-      navigate(to, { replace: true });
-      return;
-    }
 
     void (async () => {
-      const { getAccessToken } = await import("../lib/oidc");
       const token = await getAccessToken();
-      if (token) {
-        navigate("/", { replace: true });
+      if (!token) {
+        return;
       }
+
+      navigate(to ?? "/", { replace: true });
     })();
   }, [location.search, navigate]);
 
   const onLogin = async () => {
     setError(null);
     setLoading(true);
+
     try {
+      const params = new URLSearchParams(location.search);
+      const to = params.get("to");
       await ensureLoggedIn({ action: "login" });
+      navigate(to ?? "/", { replace: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed");
       setLoading(false);

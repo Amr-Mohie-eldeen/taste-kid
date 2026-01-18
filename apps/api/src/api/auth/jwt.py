@@ -46,8 +46,11 @@ def _load_jwks(jwks_url: str) -> dict:
         if now - cached_at < _JWKS_CACHE_TTL_S:
             return cached
 
-    with urllib.request.urlopen(jwks_url, timeout=2.0) as resp:  # noqa: S310
-        payload = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(jwks_url, timeout=2.0) as resp:  # noqa: S310
+            payload = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        raise InvalidTokenError("Failed to load JWKS") from exc
 
     if not isinstance(payload, dict) or "keys" not in payload:
         raise InvalidTokenError("Invalid JWKS payload")
@@ -81,15 +84,29 @@ def _decode_keycloak_token(token: str) -> dict:
         raise InvalidTokenError("Invalid JWKS key") from exc
 
     try:
-        return jwt.decode(
+        payload = jwt.decode(
             token,
             public_key,
             algorithms=["RS256"],
-            audience=KEYCLOAK_AUDIENCE,
             issuer=KEYCLOAK_ISSUER_URL,
+            options={"verify_aud": False},
         )
     except jwt.PyJWTError as exc:
         raise InvalidTokenError("Invalid token") from exc
+
+    aud = payload.get("aud")
+    azp = payload.get("azp")
+
+    if aud == KEYCLOAK_AUDIENCE:
+        return payload
+
+    if isinstance(aud, list) and KEYCLOAK_AUDIENCE in aud:
+        return payload
+
+    if isinstance(azp, str) and azp == KEYCLOAK_AUDIENCE:
+        return payload
+
+    raise InvalidTokenError("Invalid token audience")
 
 
 def decode_token(token: str) -> dict:

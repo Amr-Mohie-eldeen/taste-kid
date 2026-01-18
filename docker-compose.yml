@@ -89,6 +89,8 @@ services:
       context: ./apps/web
       args:
         VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        VITE_KEYCLOAK_ISSUER_URL: ${VITE_KEYCLOAK_ISSUER_URL:-http://localhost:8080/realms/taste-kid}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-taste-kid-web}
     ports:
       - "5173:80"
     depends_on:

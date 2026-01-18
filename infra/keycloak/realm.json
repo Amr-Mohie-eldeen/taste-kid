@@ -7,6 +7,45 @@
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "rememberMe": true,
+  "verifyEmail": false,
+  "authenticationRequiredActions": [
+    {
+      "alias": "UPDATE_PROFILE",
+      "name": "Update Profile",
+      "providerId": "UPDATE_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 40,
+      "config": {}
+    },
+    {
+      "alias": "VERIFY_PROFILE",
+      "name": "Verify Profile",
+      "providerId": "VERIFY_PROFILE",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 100,
+      "config": {}
+    },
+    {
+      "alias": "VERIFY_EMAIL",
+      "name": "Verify Email",
+      "providerId": "VERIFY_EMAIL",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 50,
+      "config": {}
+    },
+    {
+      "alias": "UPDATE_PASSWORD",
+      "name": "Update Password",
+      "providerId": "UPDATE_PASSWORD",
+      "enabled": false,
+      "defaultAction": false,
+      "priority": 30,
+      "config": {}
+    }
+  ],
   "clients": [
     {
       "clientId": "taste-kid-web",
@@ -30,7 +69,8 @@
       "defaultClientScopes": [
         "web-origins",
         "profile",
-        "email"
+        "email",
+        "basic"
       ],
       "optionalClientScopes": [
         "offline_access",

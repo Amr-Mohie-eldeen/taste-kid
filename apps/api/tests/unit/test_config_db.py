@@ -29,3 +29,22 @@ def test_db_pool_env_validation(monkeypatch: pytest.MonkeyPatch) -> None:
         import api.config
 
         importlib.reload(api.config)
+
+
+def test_keycloak_env_parsing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("KEYCLOAK_ISSUER_URL", "http://localhost:8080/realms/taste-kid")
+    monkeypatch.setenv(
+        "KEYCLOAK_JWKS_URL",
+        "http://keycloak:8080/realms/taste-kid/protocol/openid-connect/certs",
+    )
+    monkeypatch.setenv("KEYCLOAK_AUDIENCE", "taste-kid-web")
+
+    import importlib
+
+    import api.config
+
+    config = importlib.reload(api.config)
+
+    assert config.KEYCLOAK_ISSUER_URL == "http://localhost:8080/realms/taste-kid"
+    assert config.KEYCLOAK_JWKS_URL == "http://keycloak:8080/realms/taste-kid/protocol/openid-connect/certs"
+    assert config.KEYCLOAK_AUDIENCE == "taste-kid-web"

@@ -7,8 +7,16 @@ export type DecodedIdToken = {
   name?: string;
 };
 
-const issuerUri = import.meta.env.VITE_KEYCLOAK_ISSUER_URL ?? "http://localhost:8080/realms/taste-kid";
-const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID ?? "taste-kid-web";
+const issuerUri = import.meta.env.VITE_KEYCLOAK_ISSUER_URL;
+const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
+
+if (!issuerUri) {
+  throw new Error("Missing VITE_KEYCLOAK_ISSUER_URL");
+}
+
+if (!clientId) {
+  throw new Error("Missing VITE_KEYCLOAK_CLIENT_ID");
+}
 
 export const oidc = oidcSpa
   .withExpectedDecodedIdTokenShape<DecodedIdToken>({
@@ -51,10 +59,10 @@ export async function getAccessToken(): Promise<string | null> {
   return await state.getAccessToken();
 }
 
-export async function logout(): Promise<void> {
+export async function logout(params?: { redirectTo?: "home" | "current page" }): Promise<void> {
   const state = await oidc.getOidc();
   if (!state.isUserLoggedIn) {
     return;
   }
-  await state.logout({ redirectTo: "home" });
+  await state.logout({ redirectTo: params?.redirectTo ?? "home" });
 }

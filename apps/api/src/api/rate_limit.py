@@ -17,7 +17,7 @@ def _rate_limit_key(request: Request) -> str:
         if scheme.lower() == "bearer" and token:
             try:
                 payload = decode_token(token)
-            except InvalidTokenError:
+            except (InvalidTokenError, Exception):
                 payload = None
             if payload:
                 subject = payload.get("sub")
