@@ -23,7 +23,7 @@ export function bootstrapOidc(): void {
     implementation: "real",
     issuerUri,
     clientId,
-    scopes: ["profile", "email", "offline_access"],
+    scopes: ["profile", "email"],
     BASE_URL: window.location.origin,
   });
 }
