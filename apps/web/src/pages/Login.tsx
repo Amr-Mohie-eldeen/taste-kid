@@ -4,6 +4,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2, Film } from "lucide-react";
+import { api } from "../lib/api";
 import { authApi } from "../lib/auth-api";
 import { useStore } from "../lib/store";
 import { Button } from "../components/ui/button";
@@ -19,7 +20,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 
 export function Login() {
   const navigate = useNavigate();
-  const { setToken, setUserProfile, setApiStatus } = useStore();
+  const { setToken, setUserId, setUserProfile, setApiStatus } = useStore();
   const [error, setError] = useState<string | null>(null);
 
   const {
@@ -51,7 +52,15 @@ export function Login() {
 
       setToken(response.access_token);
       setApiStatus("online");
-      
+
+      try {
+        const me = await api.me();
+        if (me?.id) {
+          setUserId(me.id);
+        }
+      } catch {
+      }
+
       navigate("/dashboard");
     } catch (e) {
       console.error(e);

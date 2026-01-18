@@ -3,8 +3,6 @@ import { Link } from "react-router-dom";
 import { Card, CardContent } from "./ui/card";
 import { cn } from "../lib/utils";
 import { PosterImage } from "./PosterImage";
-import { Plus } from "lucide-react";
-import { Button } from "./ui/button";
 
 type MovieCardProps = {
   title: string | null;
@@ -14,7 +12,6 @@ type MovieCardProps = {
   meta?: string[];
   description?: string | null;
   imageUrl?: string | null;
-  actions?: React.ReactNode;
   to?: string;
   layout?: "default" | "row";
   imageClassName?: string;
@@ -26,7 +23,6 @@ export function MovieCard({
   title,
   releaseDateLabel,
   imageUrl,
-  actions,
   to,
   cardClassName,
   similarity,
@@ -53,15 +49,6 @@ export function MovieCard({
           </div>
         )}
 
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
-           <div className="transform scale-90 group-hover:scale-100 transition-transform duration-300">
-               {actions ? actions : (
-                <Button size="sm" variant="secondary" className="rounded-full h-12 w-12 bg-white/20 hover:bg-white/40 border-0 backdrop-blur-md text-white">
-                 <Plus className="h-6 w-6" />
-               </Button>
-             )}
-           </div>
-        </div>
 
         {similarityPercent !== null && (
           <div className="absolute top-2 right-2 z-10">

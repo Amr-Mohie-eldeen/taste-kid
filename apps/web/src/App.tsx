@@ -9,6 +9,7 @@ import { Login } from "./pages/Login";
 import { MovieDetail } from "./pages/MovieDetail";
 import { Signup } from "./pages/Signup";
 import { SearchPage } from "./pages/SearchPage";
+import { RatePage } from "./pages/RatePage";
 import { HistoryPage } from "./pages/HistoryPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { useStore } from "./lib/store";
@@ -28,32 +29,40 @@ export default function App() {
     let cancelled = false;
 
     void (async () => {
-      const { getAccessToken, oidc } = await import("./lib/oidc");
-      const accessToken = await getAccessToken();
+      const storeToken = useStore.getState().token;
+      const accessToken = storeToken ?? (await (await import("./lib/oidc")).getAccessToken());
 
       if (cancelled) {
         return;
       }
 
-      if (accessToken) {
-        setToken(accessToken);
-        try {
-          const oidcState = await oidc.getOidc();
-            if (oidcState.isUserLoggedIn) {
-              const profile = oidcState.getDecodedIdToken();
-              useStore.getState().setUserProfile({
-                name: profile.name,
-                email: profile.email,
-                preferred_username: profile.preferred_username,
-              });
-            }
-          const me = await api.me();
-          if (cancelled) return;
-          setUserId(me.id);
-        } catch {
-          if (cancelled) return;
+      if (!accessToken) {
+        return;
+      }
+
+      setToken(accessToken);
+
+      try {
+        const { oidc } = await import("./lib/oidc");
+        const oidcState = await oidc.getOidc();
+        if (oidcState.isUserLoggedIn) {
+          const profile = oidcState.getDecodedIdToken();
+          useStore.getState().setUserProfile({
+            name: profile.name,
+            email: profile.email,
+            preferred_username: profile.preferred_username,
+          });
         }
-      } 
+      } catch {
+      }
+
+      try {
+        const me = await api.me();
+        if (cancelled) return;
+        setUserId(me.id);
+      } catch {
+        if (cancelled) return;
+      }
     })();
 
     return () => {
@@ -78,6 +87,7 @@ export default function App() {
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/movie/:movieId" element={<MovieDetail />} />
             <Route path="/search" element={<SearchPage />} />
+            <Route path="/rate" element={<RatePage />} />
             <Route path="/history" element={<HistoryPage />} />
             <Route path="/profile" element={<ProfilePage />} />
           </Route>
