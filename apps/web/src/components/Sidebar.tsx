@@ -1,16 +1,19 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { useStore } from "../lib/store";
+import { queryClient } from "../lib/queryClient";
+import { ensureLoggedIn, logout } from "../lib/oidc";
 import {
-   Home,
-   Search,
-   History,
-   Star,
-   User,
-   LogOut,
-   Clapperboard,
- } from "lucide-react";
+  Clapperboard,
+  History,
+  Home,
+  LogIn,
+  LogOut,
+  Search,
+  Star,
+  User,
+} from "lucide-react";
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
   onNavigate?: () => void;
@@ -19,11 +22,24 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Sidebar({ className, onNavigate, collapsed }: SidebarProps) {
   const location = useLocation();
-  const { userProfile, resetSession } = useStore();
+  const navigate = useNavigate();
+  const { userId, userProfile, resetSession } = useStore();
 
-  const handleLogout = () => {
+  const handleAuthAction = async () => {
+    if (!userId) {
+      await ensureLoggedIn({ action: "login" });
+      return;
+    }
+
     resetSession();
-    window.location.href = "/";
+    queryClient.clear();
+
+    try {
+      await logout({ redirectTo: "home" });
+    } catch {
+    }
+
+    navigate("/", { replace: true });
   };
 
    const navItems = [
@@ -92,10 +108,10 @@ export function Sidebar({ className, onNavigate, collapsed }: SidebarProps) {
           {!collapsed && (
             <div className="flex flex-col overflow-hidden">
               <span className="truncate text-xs font-medium text-zinc-200">
-                {userProfile?.name || "Guest User"}
+                {userProfile?.name || userProfile?.email || "Guest"}
               </span>
               <span className="truncate text-[11px] text-zinc-300">
-                {userProfile?.email || "Sign in to sync"}
+                {userId ? "Signed in" : "Sign in to sync"}
               </span>
             </div>
           )}
@@ -103,10 +119,10 @@ export function Sidebar({ className, onNavigate, collapsed }: SidebarProps) {
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-zinc-400 hover:text-white hover:bg-white/5"
-            onClick={handleLogout}
-            title="Sign out"
+            onClick={() => void handleAuthAction()}
+            title={userId ? "Sign out" : "Sign in"}
           >
-            <LogOut className="h-4 w-4" />
+            {userId ? <LogOut className="h-4 w-4" /> : <LogIn className="h-4 w-4" />}
           </Button>
         </div>
       </div>

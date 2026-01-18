@@ -49,19 +49,20 @@ export function ProfilePage() {
           <h1 className="text-3xl font-semibold tracking-tight">Profile</h1>
           <p className="text-muted-foreground">Account details and quick stats.</p>
         </div>
-        <Button
-          variant="outline"
-          className="gap-2"
-          onClick={async () => {
-            resetSession();
-            queryClient.clear();
-            try {
-              await logout({ redirectTo: "home" });
-            } catch {
-            }
-            navigate("/", { replace: true });
-          }}
-        >
+          <Button
+            variant="outline"
+            className="gap-2"
+            onClick={async () => {
+              resetSession();
+              queryClient.clear();
+              try {
+                await logout({ redirectTo: "home" });
+              } catch {
+              }
+              navigate("/", { replace: true });
+              window.location.reload();
+            }}
+          >
           <LogOut className="h-4 w-4" />
           Sign out
         </Button>
