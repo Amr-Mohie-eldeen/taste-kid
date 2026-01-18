@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Any, Generic, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from api.auth.db import (
@@ -22,6 +22,7 @@ from api.config import (
     TMDB_POSTER_SIZE,
 )
 from api.movies import fetch_movie_detail
+from api.rate_limit import limiter, login_rate_limit, register_rate_limit
 from api.similarity import (
     apply_rerank,
     fetch_movie_metadata,
@@ -289,7 +290,9 @@ def movie_detail(movie_id: int):
 
 
 @router.post("/auth/register", response_model=ResponseEnvelope[AuthTokenResponse])
-def register(payload: AuthRegisterRequest):
+@limiter.limit(register_rate_limit)
+def register(request: Request, payload: AuthRegisterRequest):
+    _ = request
     try:
         user_id = register_user(
             email=payload.email,
@@ -307,7 +310,9 @@ def register(payload: AuthRegisterRequest):
 
 
 @router.post("/auth/login", response_model=ResponseEnvelope[AuthTokenResponse])
-def login(payload: AuthLoginRequest):
+@limiter.limit(login_rate_limit)
+def login(request: Request, payload: AuthLoginRequest):
+    _ = request
     try:
         user_id = authenticate_user(email=payload.email, password=payload.password)
     except InvalidCredentialsError as exc:
@@ -423,6 +428,31 @@ def user_feed(
     items = get_feed(user_id, k + 1, cursor)
     page_items, meta = _paginate(items, cursor, k)
     return _envelope(_map_with_image_urls(page_items, FeedItemResponse), meta)
+
+
+@router.get("/feed", response_model=ResponseEnvelope[list[FeedItemResponse]])
+def guest_feed(
+    k: int = Query(default=20, ge=1, le=100),
+    cursor: int = Query(default=0, ge=0),
+):
+    queue = get_rating_queue(0, k + 1, cursor)
+    items = [
+        FeedItemResponse(
+            id=item.id,
+            title=item.title,
+            release_date=item.release_date,
+            genres=item.genres,
+            distance=None,
+            similarity=None,
+            score=None,
+            source="popularity",
+            poster_url=_build_image_urls(item.poster_path, item.backdrop_path)[0],
+            backdrop_url=_build_image_urls(item.poster_path, item.backdrop_path)[1],
+        )
+        for item in queue
+    ]
+    page_items, meta = _paginate(items, cursor, k)
+    return _envelope(page_items, meta)
 
 
 @router.get(

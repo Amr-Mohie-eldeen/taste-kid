@@ -240,6 +240,8 @@ export const api = {
   getProfileStats: (userId: number) => request<ProfileStats>(`/users/${userId}/profile`),
   getFeed: (userId: number, k = 20, cursor?: string | null) =>
     requestPaginated<FeedItem>(`/users/${userId}/feed${buildPaginationQuery(k, cursor)}`),
+  getGuestFeed: (k = 20, cursor?: string | null) =>
+    requestPaginated<FeedItem>(`/feed${buildPaginationQuery(k, cursor)}`),
   getRecommendations: (userId: number, k = 20, cursor?: string | null) =>
     requestPaginated<Recommendation>(`/users/${userId}/recommendations${buildPaginationQuery(k, cursor)}`),
   getRatings: (userId: number, k = 20, cursor?: string | null) =>

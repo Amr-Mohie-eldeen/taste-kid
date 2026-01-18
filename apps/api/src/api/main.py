@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from starlette import status
 
 from api.config import (
@@ -18,6 +20,7 @@ from api.config import (
 )
 from api.logging_config import configure_logging
 from api.logging_context import request_id_ctx
+from api.rate_limit import limiter
 from api.similarity import EmbeddingNotFoundError
 from api.users import MovieNotFoundError, UserNotFoundError
 from api.v1.main import router as v1_router
@@ -26,6 +29,7 @@ configure_logging()
 logger = logging.getLogger("api")
 
 app = FastAPI(title="TMDB RecSys API")
+app.state.limiter = limiter
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,6 +39,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     max_age=600,
 )
+app.add_middleware(SlowAPIMiddleware)
 
 
 @app.middleware("http")
@@ -108,6 +113,7 @@ _STATUS_CODE_MAP = {
     status.HTTP_409_CONFLICT: "CONFLICT",
     status.HTTP_413_CONTENT_TOO_LARGE: "PAYLOAD_TOO_LARGE",
     status.HTTP_422_UNPROCESSABLE_CONTENT: "VALIDATION_ERROR",
+    status.HTTP_429_TOO_MANY_REQUESTS: "RATE_LIMITED",
 }
 
 
@@ -150,6 +156,15 @@ async def embedding_not_found_handler(
     _request: Request, exc: EmbeddingNotFoundError
 ) -> JSONResponse:
     return _error_response(status.HTTP_404_NOT_FOUND, "EMBEDDING_NOT_FOUND", str(exc))
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(_request: Request, _exc: RateLimitExceeded) -> JSONResponse:
+    return _error_response(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        "RATE_LIMITED",
+        "Too many requests",
+    )
 
 
 @app.exception_handler(Exception)

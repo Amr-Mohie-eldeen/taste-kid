@@ -18,10 +18,32 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-nomic-embed-text}
     ports:
       - "11434:11434"
     volumes:
       - ollama:/root/.ollama
+    entrypoint:
+      - sh
+      - -lc
+      - |
+        set -e
+        MODEL="${OLLAMA_MODEL:-nomic-embed-text}"
+        ollama serve &
+        pid=$$!
+        i=0
+        until curl -sf http://127.0.0.1:11434/api/tags >/dev/null 2>&1; do
+          i=$$((i + 1))
+          if [ "$$i" -ge 60 ]; then
+            echo "Ollama server did not become ready" >&2
+            kill "$$pid" || true
+            exit 1
+          fi
+          sleep 1
+        done
+        ollama pull "$$MODEL"
+        wait "$$pid"
 
   api:
     build:

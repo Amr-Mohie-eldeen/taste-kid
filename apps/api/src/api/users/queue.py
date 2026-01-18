@@ -10,7 +10,8 @@ from api.users.types import FeedItem, NextMovie, RatingQueueItem
 
 
 def get_rating_queue(user_id: int, limit: int, offset: int = 0) -> list[RatingQueueItem]:
-    ensure_user(user_id)
+    if user_id != 0:
+        ensure_user(user_id)
     engine = get_engine()
     q = text(
         """
