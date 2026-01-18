@@ -28,12 +28,19 @@ export function bootstrapOidc(): void {
   });
 }
 
-export async function ensureLoggedIn(): Promise<void> {
+export async function ensureLoggedIn(params?: { action?: "login" | "register" }): Promise<void> {
   const state = await oidc.getOidc();
   if (state.isUserLoggedIn) {
     return;
   }
-  await state.login({});
+
+  const kc_action = params?.action === "register" ? "REGISTER" : "LOGIN";
+
+  await state.login({
+    extraQueryParams: {
+      kc_action,
+    },
+  });
 }
 
 export async function getAccessToken(): Promise<string | null> {

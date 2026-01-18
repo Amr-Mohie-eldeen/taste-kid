@@ -22,7 +22,7 @@ export function Login() {
     setError(null);
     setLoading(true);
     try {
-      await ensureLoggedIn();
+      await ensureLoggedIn({ action: "login" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Login failed");
       setLoading(false);

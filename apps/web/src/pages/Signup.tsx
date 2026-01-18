@@ -12,7 +12,7 @@ export function Signup() {
     setError(null);
     setLoading(true);
     try {
-      await ensureLoggedIn();
+      await ensureLoggedIn({ action: "register" });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Signup failed");
       setLoading(false);
