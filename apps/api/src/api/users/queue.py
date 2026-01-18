@@ -171,7 +171,7 @@ def get_feed(
             meta,
         )
 
-    queue = get_rating_queue(user_id, limit, offset)
+    queue = get_rating_queue(user_id, limit + 1, offset)
     return (
         [
             FeedItem(

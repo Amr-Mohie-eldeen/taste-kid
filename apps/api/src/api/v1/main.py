@@ -426,16 +426,12 @@ def user_feed(
 ):
     items, meta = get_feed(user_id, k, cursor)
     if meta is None:
-        has_more = True
-        next_cursor: str | None = None
-        if len(items) < k:
-            has_more = False
-        else:
-            next_cursor = str(cursor + k)
-        meta = {"next_cursor": next_cursor, "has_more": has_more}
+        page_items, meta = _paginate(items, cursor, k)
+    else:
+        page_items = items
 
     return _envelope(
-        _map_with_image_urls(items, FeedItemResponse),
+        _map_with_image_urls(page_items, FeedItemResponse),
         meta,
     )
 

@@ -245,7 +245,7 @@ def get_recommendations_page(
     cached_items: list[Recommendation] = list(cached.items) if cached is not None else []
 
     needed_end = (window_index + 1) * window_size
-    if len(cached_items) < needed_end and RECOMMENDATIONS_CACHE_TTL_S > 0:
+    if len(cached_items) < needed_end:
         missing_windows_start = len(cached_items) // window_size
         max_windows = max(1, RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST)
         for idx in range(missing_windows_start, missing_windows_start + max_windows):
@@ -270,13 +270,14 @@ def get_recommendations_page(
             if len(window_candidates) < window_size:
                 break
 
-        now = time.time()
-        entry = FeedCacheEntry(
-            feed_id=str(uuid.uuid4()),
-            expires_at=now + RECOMMENDATIONS_CACHE_TTL_S,
-            items=cached_items,
-        )
-        _CACHE.set(cache_key, entry)
+        if RECOMMENDATIONS_CACHE_TTL_S > 0:
+            now = time.time()
+            entry = FeedCacheEntry(
+                feed_id=str(uuid.uuid4()),
+                expires_at=now + RECOMMENDATIONS_CACHE_TTL_S,
+                items=cached_items,
+            )
+            _CACHE.set(cache_key, entry)
 
     items, meta = _paginate_windows(
         items=cached_items,
