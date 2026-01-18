@@ -1,0 +1,43 @@
+{
+  "realm": "taste-kid",
+  "enabled": true,
+  "displayName": "Taste-Kid",
+  "registrationAllowed": true,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "rememberMe": true,
+  "clients": [
+    {
+      "clientId": "taste-kid-web",
+      "name": "Taste-Kid Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "defaultClientScopes": [
+        "web-origins",
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "offline_access",
+        "address",
+        "phone",
+        "roles"
+      ]
+    }
+  ]
+}

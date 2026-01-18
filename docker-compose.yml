@@ -45,6 +45,25 @@ services:
         ollama pull "$$MODEL"
         wait "$$pid"
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.5.1
+    environment:
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+    command: start-dev --import-realm
+    ports:
+      - "${KEYCLOAK_PORT}:8080"
+    volumes:
+      - ./infra/keycloak/realm.json:/opt/keycloak/data/import/realm.json:ro
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
   api:
     build:
       context: ./apps/api
@@ -56,6 +75,9 @@ services:
       AWS_REGION: ${AWS_REGION}
       BEDROCK_EMBED_MODEL_ID: ${BEDROCK_EMBED_MODEL_ID}
       EMBEDDING_DIM: ${EMBEDDING_DIM}
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL}
+      KEYCLOAK_AUDIENCE: ${KEYCLOAK_AUDIENCE}
+      KEYCLOAK_JWKS_URL: ${KEYCLOAK_JWKS_URL}
     ports:
       - "${API_PORT}:8000"
     depends_on:

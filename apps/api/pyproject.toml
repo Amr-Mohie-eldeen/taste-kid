@@ -13,6 +13,7 @@ dependencies = [
   "passlib>=1.7.4",
   "slowapi>=0.1.9",
   "limits>=3.10",
+  "cryptography>=46.0.3",
 ]
 
 [dependency-groups]

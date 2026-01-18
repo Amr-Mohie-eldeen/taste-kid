@@ -5,7 +5,9 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { api } from "./lib/api";
 import { AppShell } from "./components/AppShell";
 import { Dashboard } from "./pages/Dashboard";
+import { Login } from "./pages/Login";
 import { MovieDetail } from "./pages/MovieDetail";
+import { Signup } from "./pages/Signup";
 import { useStore } from "./lib/store";
 import { queryClient } from "./lib/queryClient";
 
@@ -30,6 +32,8 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route element={<AppShell />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
             <Route
               path="/"
               element={

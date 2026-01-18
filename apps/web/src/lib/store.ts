@@ -25,6 +25,7 @@ export const useStore = create<AppState>()(
       }),
       {
         name: "tastekid-storage",
+        partialize: (state) => ({ apiStatus: state.apiStatus }),
       }
     )
   )

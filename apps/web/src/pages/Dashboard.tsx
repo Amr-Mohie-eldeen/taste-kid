@@ -43,11 +43,6 @@ type DashboardProps = {
 
 export function Dashboard({ userId, setUserId }: DashboardProps) {
   const resetSession = useStore((state) => state.resetSession);
-  const [displayName, setDisplayName] = useState("");
-  const [registerEmail, setRegisterEmail] = useState("");
-  const [registerPassword, setRegisterPassword] = useState("");
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
   const [activeTab, setActiveTab] = useState("feed");
   
   const feedPageSize = 20;
@@ -90,8 +85,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   } = useMovieSearch(searchQuery, isSearchEnabled);
 
   // Mutations
-  const createUser = useCreateUser();
-  const login = useLogin();
   const rateMovie = useRateMovie();
 
   const feedItems = useMemo(
@@ -155,20 +148,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     setIsSearchEnabled(true);
   };
 
-  const handleCreateUser = () => {
-    createUser.mutate({
-      email: registerEmail.trim(),
-      password: registerPassword,
-      displayName: displayName.trim() || null,
-    });
-  };
-
-  const handleLogin = () => {
-    login.mutate({
-      email: loginEmail.trim(),
-      password: loginPassword,
-    });
-  };
 
   const handleRateMovie = (movieId: number, rating: number | null, status: string) => {
     if (!userId) return;
@@ -271,76 +250,34 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-2 text-primary mb-1">
                   <Zap className="h-4 w-4 fill-primary" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Quick Start</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Session</span>
                 </div>
-                <CardTitle className="text-xl">Initialize Profile</CardTitle>
-                <CardDescription className="text-xs">Create a new identity or load an existing one.</CardDescription>
+                <CardTitle className="text-xl">Sign in to continue</CardTitle>
+                <CardDescription className="text-xs">Authentication is handled by the identity provider.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Email"
-                    value={registerEmail}
-                    onChange={(event) => setRegisterEmail(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Input
-                    placeholder="Password"
-                    type="password"
-                    value={registerPassword}
-                    onChange={(event) => setRegisterPassword(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Input
-                    placeholder="Identity Name"
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Button 
-                    onClick={handleCreateUser} 
-                    disabled={createUser.isPending}
-                    className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
-                  >
+              <CardContent className="space-y-3">
+                <Button
+                  asChild
+                  className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
+                >
+                  <a href="/login">
+                    <LogIn className="h-4 w-4" />
+                    Continue with Login
+                  </a>
+                </Button>
+                <Button
+                  variant="secondary"
+                  asChild
+                  className="w-full h-10 rounded-xl gap-2 font-bold"
+                >
+                  <a href="/signup">
                     <UserPlus className="h-4 w-4" />
                     Create Account
-                  </Button>
-                </div>
-                <div className="relative py-2">
-                  <div className="absolute inset-0 flex items-center">
-                    <Separator />
-                  </div>
-                  <div className="relative flex justify-center text-[10px] uppercase font-bold">
-                    <span className="bg-background px-2 text-muted-foreground">OR</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Email"
-                    value={loginEmail}
-                    onChange={(event) => setLoginEmail(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Input
-                    placeholder="Password"
-                    type="password"
-                    value={loginPassword}
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Button 
-                    variant="secondary" 
-                    onClick={handleLogin}
-                    disabled={login.isPending}
-                    className="w-full h-10 rounded-xl gap-2 font-bold"
-                  >
-                    <LogIn className="h-4 w-4" />
-                    Sign In
-                  </Button>
-                </div>
+                  </a>
+                </Button>
                 {summaryError && (
                   <p className="text-[11px] font-medium text-destructive bg-destructive/5 p-2 rounded-lg border border-destructive/10 text-center">
-                    Authentication failed. Check your ID.
+                    Authentication failed.
                   </p>
                 )}
               </CardContent>
