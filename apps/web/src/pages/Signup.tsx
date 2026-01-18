@@ -1,92 +1,209 @@
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
+import { Loader2, Film, CheckCircle2 } from "lucide-react";
 import { ensureLoggedIn } from "../lib/oidc";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
+import { Input } from "../components/ui/input";
+import { cn } from "../lib/utils";
+
+const signupSchema = z
+  .object({
+    name: z.string().min(2, "Name must be at least 2 characters"),
+    email: z.string().email("Please enter a valid email"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+
+type SignupForm = z.infer<typeof signupSchema>;
 
 export function Signup() {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
 
-  const onSignup = async () => {
-    setError(null);
-    setLoading(true);
-    try {
-      await ensureLoggedIn({ action: "register" });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Signup failed");
-      setLoading(false);
-    }
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SignupForm>({
+    resolver: zodResolver(signupSchema),
+  });
+
+  const onSubmit = async (data: SignupForm) => {
+    setSuccess(true);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await ensureLoggedIn({ action: "register" });
   };
 
+  if (success) {
+    return (
+      <div className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 text-center">
+        <div className="flex max-w-md flex-col items-center space-y-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-500">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+          <h2 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+            Account Created
+          </h2>
+          <p className="text-zinc-500 dark:text-zinc-400">
+            Finishing setup...
+          </p>
+          <Loader2 className="h-5 w-5 animate-spin text-zinc-400" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-[calc(100vh-64px)] px-4 py-10">
-      <div className="mx-auto w-full max-w-[980px]">
-        <div className="grid items-stretch gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div className="relative overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-emerald-50 via-white to-slate-50 p-8 shadow-sm">
-            <div className="absolute inset-0 opacity-[0.35] [background:radial-gradient(circle_at_25%_15%,rgba(16,185,129,0.20),transparent_55%),radial-gradient(circle_at_75%_25%,rgba(59,130,246,0.14),transparent_55%),radial-gradient(circle_at_30%_85%,rgba(244,63,94,0.10),transparent_60%)]" />
-            <div className="relative space-y-5">
-              <div className="space-y-2">
-                <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-muted-foreground">
-                  Taste-Kid Identity
-                </p>
-                <h1 className="text-3xl font-semibold tracking-tight">Create your account</h1>
-                <p className="text-sm text-muted-foreground">
-                  Sign up through the identity provider. You’ll be redirected back ready to start rating.
-                </p>
-              </div>
+    <div className="flex min-h-screen w-full">
+      <div className="hidden w-1/2 flex-col justify-between bg-zinc-900 p-12 text-white lg:flex relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-emerald-500/20 via-zinc-900/0 to-zinc-900/0" />
+        <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=2825&auto=format&fit=crop')] bg-cover bg-center opacity-10 mix-blend-overlay" />
 
-              <div className="flex flex-wrap items-center gap-3">
-                <Button
-                  onClick={onSignup}
-                  disabled={loading}
-                  className="h-11 rounded-2xl px-5 font-bold"
-                >
-                  {loading ? "Redirecting…" : "Continue to Signup"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  asChild
-                  className="h-11 rounded-2xl px-5 font-bold"
-                >
-                  <Link to="/login">I already have an account</Link>
-                </Button>
-              </div>
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 text-lg font-bold tracking-tight">
+            <Film className="h-6 w-6" />
+            <span>Taste-Kid</span>
+          </div>
+        </div>
 
-              {error && (
-                <div className="rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-                  {error}
-                </div>
-              )}
+        <div className="relative z-10 max-w-md space-y-4">
+          <h1 className="text-4xl font-medium tracking-tight font-serif text-zinc-100">
+            Join the Community.
+          </h1>
+          <p className="text-lg text-zinc-400 font-light leading-relaxed">
+            Start building your taste profile today. Rate movies, get personalized recommendations, and discover hidden gems.
+          </p>
+        </div>
 
-              <div className="pt-2 text-xs text-muted-foreground">
-                Your email and profile are managed by the provider.
-              </div>
-            </div>
+        <div className="relative z-10 text-sm text-zinc-600">
+          &copy; 2026 Taste-Kid. All rights reserved.
+        </div>
+      </div>
+
+       <div className="flex flex-1 flex-col items-center justify-center bg-background px-4 sm:px-12 lg:px-24">
+        <div className="w-full max-w-sm space-y-8">
+          <div className="space-y-2 text-center lg:text-left">
+            <h2 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              Create an account
+            </h2>
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">
+              Enter your details to get started.
+            </p>
           </div>
 
-          <Card className="rounded-3xl border-border/60 shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-lg">Next steps</CardTitle>
-              <CardDescription className="text-xs">
-                After signup, you can start building your taste profile immediately.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
-              <div className="rounded-2xl border border-border/60 bg-secondary/20 p-4">
-                <p className="font-semibold">Rate a few movies</p>
-                <p className="text-xs text-muted-foreground">The model learns fast from a handful of signals.</p>
-              </div>
-              <div className="rounded-2xl border border-border/60 bg-secondary/20 p-4">
-                <p className="font-semibold">See your feed adapt</p>
-                <p className="text-xs text-muted-foreground">Dislikes refine results just as much as likes.</p>
-              </div>
-              <div className="rounded-2xl border border-border/60 bg-secondary/20 p-4">
-                <p className="font-semibold">Own your identity</p>
-                <p className="text-xs text-muted-foreground">Identity and sessions stay with the provider.</p>
-              </div>
-            </CardContent>
-          </Card>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-zinc-500" htmlFor="name">
+                Full Name
+              </label>
+              <Input
+                id="name"
+                placeholder="John Doe"
+                type="text"
+                autoComplete="name"
+                disabled={isSubmitting}
+                className={cn(
+                  "h-11 bg-background",
+                  errors.name && "border-red-500 focus-visible:ring-red-500"
+                )}
+                {...register("name")}
+              />
+              {errors.name && (
+                <p className="text-xs text-red-500">{errors.name.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-zinc-500" htmlFor="email">
+                Email
+              </label>
+              <Input
+                id="email"
+                placeholder="name@example.com"
+                type="email"
+                autoComplete="email"
+                disabled={isSubmitting}
+                className={cn(
+                  "h-11 bg-background",
+                  errors.email && "border-red-500 focus-visible:ring-red-500"
+                )}
+                {...register("email")}
+              />
+              {errors.email && (
+                <p className="text-xs text-red-500">{errors.email.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-zinc-500" htmlFor="password">
+                Password
+              </label>
+              <Input
+                id="password"
+                placeholder="Min. 8 characters"
+                type="password"
+                autoComplete="new-password"
+                disabled={isSubmitting}
+                className={cn(
+                  "h-11 bg-background",
+                  errors.password && "border-red-500 focus-visible:ring-red-500"
+                )}
+                {...register("password")}
+              />
+              {errors.password && (
+                <p className="text-xs text-red-500">{errors.password.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium uppercase tracking-wider text-zinc-500" htmlFor="confirmPassword">
+                Confirm Password
+              </label>
+              <Input
+                id="confirmPassword"
+                placeholder="Confirm password"
+                type="password"
+                autoComplete="new-password"
+                disabled={isSubmitting}
+                className={cn(
+                  "h-11 bg-background",
+                  errors.confirmPassword && "border-red-500 focus-visible:ring-red-500"
+                )}
+                {...register("confirmPassword")}
+              />
+              {errors.confirmPassword && (
+                <p className="text-xs text-red-500">{errors.confirmPassword.message}</p>
+              )}
+            </div>
+
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="h-11 w-full rounded-full bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              {isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                "Create Account"
+              )}
+            </Button>
+          </form>
+
+          <div className="text-center text-sm text-zinc-500">
+            Already have an account?{" "}
+            <Link 
+              to="/login" 
+              className="font-medium text-zinc-900 hover:underline dark:text-zinc-50"
+            >
+              Sign in
+            </Link>
+          </div>
         </div>
       </div>
     </div>

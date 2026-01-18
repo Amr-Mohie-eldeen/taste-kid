@@ -3,14 +3,16 @@ import ReactDOM from "react-dom/client";
 import { oidcEarlyInit } from "oidc-spa";
 import App from "./App";
 import "./index.css";
-import { bootstrapOidc } from "./lib/oidc";
+import { bootstrapOidc, isOidcConfigured } from "./lib/oidc";
 
 const { shouldLoadApp } = oidcEarlyInit({
   BASE_URL: window.location.origin,
 });
 
 if (shouldLoadApp) {
-  bootstrapOidc();
+  if (isOidcConfigured()) {
+    bootstrapOidc();
+  }
 
   ReactDOM.createRoot(document.getElementById("root")!).render(
     <React.StrictMode>

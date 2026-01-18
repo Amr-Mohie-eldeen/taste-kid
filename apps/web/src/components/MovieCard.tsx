@@ -1,9 +1,10 @@
 import * as React from "react";
 import { Link } from "react-router-dom";
-import { Badge } from "./ui/badge";
 import { Card, CardContent } from "./ui/card";
 import { cn } from "../lib/utils";
 import { PosterImage } from "./PosterImage";
+import { Plus } from "lucide-react";
+import { Button } from "./ui/button";
 
 type MovieCardProps = {
   title: string | null;
@@ -23,106 +24,61 @@ type MovieCardProps = {
 
 export function MovieCard({
   title,
-  subtitle,
   releaseDateLabel,
-  genres,
-  meta = [],
-  description,
   imageUrl,
   actions,
   to,
-  layout = "default",
-  imageClassName,
   cardClassName,
   similarity,
 }: MovieCardProps) {
-  const genreList = genres?.split(",").map((genre) => genre.trim()).filter(Boolean) ?? [];
-  const visibleGenres = genreList.slice(0, 2);
-  const remainingGenres = Math.max(0, genreList.length - visibleGenres.length);
+  const year = releaseDateLabel ? releaseDateLabel.split(",").pop()?.trim() : "";
+
   const similarityValue = similarity ?? null;
   const similarityPercent = similarityValue === null
     ? null
     : Math.round(Math.min(100, similarityValue <= 1 ? similarityValue * 100 : similarityValue));
 
   const content = (
-    <CardContent
-      className={cn(
-        "flex flex-grow flex-col gap-4 p-4",
-        layout === "row" ? "sm:flex-row" : ""
-      )}
-    >
-      <div
-        className={cn(
-          "relative w-full overflow-hidden rounded-xl bg-muted shadow-inner",
-          layout === "row" ? "aspect-[2/3] sm:w-32 flex-shrink-0" : "aspect-[16/9]",
-          imageClassName
-        )}
-      >
+    <CardContent className="p-0 relative group h-full">
+      <div className="relative aspect-[2/3] w-full overflow-hidden rounded-md bg-muted">
         {imageUrl ? (
           <PosterImage
             src={imageUrl}
             alt={title ?? "Movie"}
-            className="transition-transform duration-700 ease-out group-hover:scale-110"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
           />
         ) : (
-          <div className="flex h-full items-center justify-center bg-gradient-to-br from-muted to-accent text-xs font-medium text-muted-foreground uppercase tracking-widest">
+          <div className="flex h-full items-center justify-center bg-zinc-900 text-xs font-medium text-zinc-500 uppercase tracking-widest">
             No Poster
           </div>
         )}
+
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
+           <div className="transform scale-90 group-hover:scale-100 transition-transform duration-300">
+               {actions ? actions : (
+                <Button size="sm" variant="secondary" className="rounded-full h-12 w-12 bg-white/20 hover:bg-white/40 border-0 backdrop-blur-md text-white">
+                 <Plus className="h-6 w-6" />
+               </Button>
+             )}
+           </div>
+        </div>
+
         {similarityPercent !== null && (
-          <div className="absolute right-2 top-2 z-10">
-            <div className="flex h-9 w-9 items-center justify-center rounded-full border border-white/20 bg-black/60 text-[10px] font-bold text-white backdrop-blur-md">
-              {similarityPercent}%
+          <div className="absolute top-2 right-2 z-10">
+            <div className="bg-green-500/90 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow-sm backdrop-blur-sm">
+              {similarityPercent}% Match
             </div>
           </div>
         )}
       </div>
-      <div className="flex flex-grow flex-col space-y-2.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h4 className="line-clamp-1 text-base font-bold tracking-tight text-foreground group-hover:text-primary transition-colors">
-              {title ?? "Untitled"}
-            </h4>
-            <div className="flex items-center gap-2">
-              {releaseDateLabel ? (
-                <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/80">
-                  {releaseDateLabel}
-                </span>
-              ) : null}
-              {releaseDateLabel && visibleGenres.length > 0 && (
-                <span className="h-1 w-1 rounded-full bg-border" />
-              )}
-              {visibleGenres.length ? (
-                <p className="line-clamp-1 text-[11px] font-medium text-muted-foreground/80 uppercase tracking-wider">
-                  {visibleGenres.join(" • ")}
-                </p>
-              ) : null}
-            </div>
-          </div>
+
+      <div className="mt-2 space-y-0.5 px-1">
+        <h4 className="text-sm font-semibold leading-tight text-foreground truncate group-hover:text-primary transition-colors">
+          {title ?? "Untitled"}
+        </h4>
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+           <span>{year}</span>
         </div>
-        
-        {subtitle && (
-          <p className="line-clamp-1 text-xs italic text-muted-foreground">{subtitle}</p>
-        )}
-
-        {description ? (
-          <p className="line-clamp-2 text-[13px] leading-relaxed text-muted-foreground/90">
-            {description}
-          </p>
-        ) : null}
-
-        {meta.length ? (
-          <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] font-medium text-muted-foreground">
-            {meta.map((item) => (
-              <span key={item} className="flex items-center gap-1.5">
-                <span className="h-1 w-1 rounded-full bg-primary/40" />
-                {item}
-              </span>
-            ))}
-          </div>
-        ) : null}
-        
-        {actions ? <div className="mt-auto flex flex-wrap gap-2 pt-2">{actions}</div> : null}
       </div>
     </CardContent>
   );
@@ -130,8 +86,7 @@ export function MovieCard({
   const card = (
     <Card
       className={cn(
-        "group h-full overflow-hidden border-border/40 bg-card/50 transition-all duration-300 backdrop-blur-sm",
-        to && "hover:-translate-y-1.5 hover:border-primary/20 hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.1)] hover:bg-card",
+        "border-0 shadow-none bg-transparent transition-all duration-300",
         cardClassName
       )}
     >
@@ -142,7 +97,7 @@ export function MovieCard({
   if (!to) return card;
 
   return (
-    <Link className="block h-full" to={to}>
+    <Link className="block h-full group" to={to}>
       {card}
     </Link>
   );
