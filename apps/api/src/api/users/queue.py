@@ -5,7 +5,7 @@ from sqlalchemy import text
 from api.config import USER_UNWATCHED_COOLDOWN_DAYS
 from api.db import get_engine
 from api.users.db import ensure_user
-from api.users.recommendations import get_recommendations
+from api.users.recommendations import get_recommendations_page
 from api.users.types import FeedItem, NextMovie, RatingQueueItem
 
 
@@ -141,7 +141,7 @@ def get_next_movie(user_id: int) -> NextMovie | None:
     return _get_next_from_popularity(user_id)
 
 
-def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
+def get_feed(user_id: int, limit: int, offset: int = 0) -> tuple[list[FeedItem], dict[str, object] | None]:
     ensure_user(user_id)
     engine = get_engine()
     q_profile = text("SELECT 1 FROM user_profiles WHERE user_id = :user_id")
@@ -149,8 +149,29 @@ def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
         has_profile = conn.execute(q_profile, {"user_id": user_id}).first() is not None
 
     if has_profile:
-        recs = get_recommendations(user_id, limit, offset)
-        return [
+        recs, meta = get_recommendations_page(user_id, limit, offset)
+        return (
+            [
+                FeedItem(
+                    id=item.id,
+                    title=item.title,
+                    release_date=item.release_date,
+                    genres=item.genres,
+                    poster_path=item.poster_path,
+                    backdrop_path=item.backdrop_path,
+                    distance=item.distance,
+                    similarity=item.similarity,
+                    score=item.score,
+                    source="profile",
+                )
+                for item in recs
+            ],
+            meta,
+        )
+
+    queue = get_rating_queue(user_id, limit, offset)
+    return (
+        [
             FeedItem(
                 id=item.id,
                 title=item.title,
@@ -158,27 +179,12 @@ def get_feed(user_id: int, limit: int, offset: int = 0) -> list[FeedItem]:
                 genres=item.genres,
                 poster_path=item.poster_path,
                 backdrop_path=item.backdrop_path,
-                distance=item.distance,
-                similarity=item.similarity,
-                score=item.score,
-                source="profile",
+                distance=None,
+                similarity=None,
+                score=None,
+                source="popularity",
             )
-            for item in recs
-        ]
-
-    queue = get_rating_queue(user_id, limit, offset)
-    return [
-        FeedItem(
-            id=item.id,
-            title=item.title,
-            release_date=item.release_date,
-            genres=item.genres,
-            poster_path=item.poster_path,
-            backdrop_path=item.backdrop_path,
-            distance=None,
-            similarity=None,
-            score=None,
-            source="popularity",
-        )
-        for item in queue
-    ]
+            for item in queue
+        ],
+        None,
+    )

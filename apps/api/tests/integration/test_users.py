@@ -365,6 +365,47 @@ async def test_personalized_feed_pagination_has_no_duplicates(client: AsyncClien
 
 
 @pytest.mark.asyncio
+async def test_personalized_feed_does_not_span_windows(client: AsyncClient, seeded_movies, authed_user, monkeypatch):  # noqa: ARG001
+    monkeypatch.setattr("api.users.recommendations.MAX_FETCH_CANDIDATES", 50)
+    monkeypatch.setattr("api.users.recommendations.RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST", 1)
+
+    user_id, headers = authed_user
+
+    await client.put(
+        f"/v1/users/{user_id}/ratings/{seeded_movies['inception_id']}",
+        headers=headers,
+        json={"rating": 5},
+    )
+
+    page_size = 20
+    # cursor=40 is near the end of window 0 when window_size=50.
+    resp = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor=40",
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    items = payload["data"]
+    meta = payload["meta"]
+
+    # We should only return the remaining items in the current window (50 - 40 = 10), not 20.
+    assert len(items) == 10
+    assert meta["has_more"] is True
+    assert meta["next_cursor"] == "50"
+
+    # Next page starts at the next window boundary.
+    resp2 = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor=50",
+        headers=headers,
+    )
+    assert resp2.status_code == 200
+    payload2 = resp2.json()
+    items2 = payload2["data"]
+
+    assert len(set(item["id"] for item in items) & set(item["id"] for item in items2)) == 0
+
+
+@pytest.mark.asyncio
 async def test_state_transitions_and_deletion(
     client: AsyncClient, seeded_movies, db_engine, authed_user
 ):  # noqa: ARG001

@@ -36,6 +36,7 @@ from api.users import (
     get_profile_stats,
     get_rating_queue,
     get_recommendations,
+    get_recommendations_page,
     get_user_movie_match,
     get_user_ratings,
     get_user_summary,
@@ -373,9 +374,8 @@ def user_recommendations(
     cursor: int = Query(default=0, ge=0),
     _auth: int = Depends(require_user_access),
 ):
-    recs = get_recommendations(user_id, k + 1, cursor)
-    page_recs, meta = _paginate(recs, cursor, k)
-    return _envelope(_map_with_image_urls(page_recs, RecommendationResponse), meta)
+    items, meta = get_recommendations_page(user_id, k, cursor)
+    return _envelope(_map_with_image_urls(items, RecommendationResponse), meta)
 
 
 @router.get(
@@ -425,9 +425,20 @@ def user_feed(
     cursor: int = Query(default=0, ge=0),
     _auth: int = Depends(require_user_access),
 ):
-    items = get_feed(user_id, k + 1, cursor)
-    page_items, meta = _paginate(items, cursor, k)
-    return _envelope(_map_with_image_urls(page_items, FeedItemResponse), meta)
+    items, meta = get_feed(user_id, k, cursor)
+    if meta is None:
+        has_more = True
+        next_cursor: str | None = None
+        if len(items) < k:
+            has_more = False
+        else:
+            next_cursor = str(cursor + k)
+        meta = {"next_cursor": next_cursor, "has_more": has_more}
+
+    return _envelope(
+        _map_with_image_urls(items, FeedItemResponse),
+        meta,
+    )
 
 
 @router.get("/feed", response_model=ResponseEnvelope[list[FeedItemResponse]])
