@@ -9,6 +9,7 @@ from api.users.embeddings import (
     _fetch_profile_embeddings,
     _profile_weight,
 )
+from api.users.recommendations import invalidate_recommendations_cache
 from api.users.ratings import _count_liked_ratings, _count_watched_ratings
 from api.users.types import ProfileStats
 
@@ -18,6 +19,7 @@ def recompute_profile(user_id: int) -> None:
     rows = _fetch_profile_embeddings(user_id)
     num_ratings = _count_watched_ratings(user_id)
     if not rows:
+        invalidate_recommendations_cache(user_id)
         engine = get_engine()
         with engine.begin() as conn:
             conn.execute(
@@ -49,6 +51,8 @@ def recompute_profile(user_id: int) -> None:
                 "num_ratings": num_ratings,
             },
         )
+
+    invalidate_recommendations_cache(user_id)
 
 
 def get_profile_stats(user_id: int) -> ProfileStats:

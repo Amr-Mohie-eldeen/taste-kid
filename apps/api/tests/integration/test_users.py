@@ -333,6 +333,38 @@ async def test_feed_source_switching(client: AsyncClient, seeded_movies, authed_
 
 
 @pytest.mark.asyncio
+async def test_personalized_feed_pagination_has_no_duplicates(client: AsyncClient, seeded_movies, authed_user):  # noqa: ARG001
+    user_id, headers = authed_user
+
+    await client.put(
+        f"/v1/users/{user_id}/ratings/{seeded_movies['inception_id']}",
+        headers=headers,
+        json={"rating": 5},
+    )
+
+    page_size = 20
+    resp1 = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor=0",
+        headers=headers,
+    )
+    assert resp1.status_code == 200
+    payload1 = resp1.json()
+    ids1 = [item["id"] for item in payload1["data"]]
+    assert len(ids1) == page_size
+
+    resp2 = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor={page_size}",
+        headers=headers,
+    )
+    assert resp2.status_code == 200
+    payload2 = resp2.json()
+    ids2 = [item["id"] for item in payload2["data"]]
+    assert len(ids2) == page_size
+
+    assert len(set(ids1) & set(ids2)) == 0
+
+
+@pytest.mark.asyncio
 async def test_state_transitions_and_deletion(
     client: AsyncClient, seeded_movies, db_engine, authed_user
 ):  # noqa: ARG001
@@ -409,11 +441,11 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine,
 
     inv_sqrt2 = 1.0 / math.sqrt(2.0)
 
-    anchor_id = 100
-    candidate_a_id = 101
-    candidate_b_id = 102
+    anchor_id = 2000
+    candidate_a_id = 2001
+    candidate_b_id = 2002
 
-    dislike_ids = [200 + idx for idx in range(DISLIKE_MIN_COUNT)]
+    dislike_ids = [2100 + idx for idx in range(DISLIKE_MIN_COUNT)]
 
     movies = [
         {"id": anchor_id, "title": "Anchor", "embedding": vec(1.0, 0.0)},

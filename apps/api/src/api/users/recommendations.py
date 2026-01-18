@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 
 from pgvector.psycopg import Vector
 from sqlalchemy import text
@@ -9,7 +11,7 @@ from api.config import (
     DISLIKE_MIN_COUNT,
     DISLIKE_WEIGHT,
     MAX_FETCH_CANDIDATES,
-    RERANK_FETCH_MULTIPLIER,
+    RECOMMENDATIONS_CACHE_TTL_S,
     USER_UNWATCHED_COOLDOWN_DAYS,
 )
 from api.db import get_engine
@@ -20,14 +22,29 @@ from api.users.embeddings import (
     _dislike_weight,
     _fetch_disliked_embeddings,
 )
+from api.users.feed_cache import FeedCacheEntry, _CACHE
 from api.users.scoring import _build_user_dislike_context, _build_user_scoring_context
 from api.users.types import Recommendation
 
 logger = logging.getLogger("api")
 
 
+def _recommendation_cache_key(user_id: int) -> str:
+    return f"recs:{user_id}"
+
+
+def invalidate_recommendations_cache(user_id: int) -> None:
+    _CACHE.delete(_recommendation_cache_key(user_id))
+
+
 def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
     ensure_user(user_id)
+
+    cache_key = _recommendation_cache_key(user_id)
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached.items[offset : offset + limit]
+
     engine = get_engine()
     q_profile = text("SELECT embedding AS embedding FROM user_profiles WHERE user_id = :user_id")
     with engine.begin() as conn:
@@ -51,9 +68,7 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
         and min(len(dislike_rows), dislike_ctx_count) >= DISLIKE_MIN_COUNT
     )
 
-    # Fetch more candidates than needed to allow reranking to select the best matches.
-    # The multiplier balances candidate diversity with query performance, but capped to prevent excessive load.
-    fetch_limit = min(limit * RERANK_FETCH_MULTIPLIER, MAX_FETCH_CANDIDATES)
+    snapshot_limit = MAX_FETCH_CANDIDATES
 
     if apply_dislike:
         q = text(
@@ -112,8 +127,8 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
     params: dict[str, object] = {
         "user_id": user_id,
         "embedding": embedding,
-        "limit": fetch_limit,
-        "offset": offset,
+        "limit": snapshot_limit,
+        "offset": 0,
         "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
     }
     if apply_dislike:
@@ -175,7 +190,17 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
             -(item.vote_count or 0),
         )
     )
-    results = candidates[:limit]
+
+    if RECOMMENDATIONS_CACHE_TTL_S > 0:
+        now = time.time()
+        entry = FeedCacheEntry(
+            feed_id=str(uuid.uuid4()),
+            expires_at=now + RECOMMENDATIONS_CACHE_TTL_S,
+            items=candidates,
+        )
+        _CACHE.set(cache_key, entry)
+
+    results = candidates[offset : offset + limit]
     if results:
         log_sample = results[:10]
         logger.info(
