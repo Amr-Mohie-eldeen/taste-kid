@@ -38,7 +38,7 @@ def get_engine() -> Engine:
             register_vector(dbapi_conn)
             if DB_STATEMENT_TIMEOUT_MS > 0:
                 cursor = dbapi_conn.cursor()
-                cursor.execute("SET statement_timeout = %s", (DB_STATEMENT_TIMEOUT_MS,))
+                cursor.execute(f"SET statement_timeout = {DB_STATEMENT_TIMEOUT_MS}")
                 cursor.close()
 
         @event.listens_for(_ENGINE, "before_cursor_execute")

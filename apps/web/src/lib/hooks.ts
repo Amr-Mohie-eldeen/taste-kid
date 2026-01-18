@@ -64,9 +64,10 @@ export function useLogin() {
 export function useFeed(userId: number | null, limit: number) {
   return useInfiniteQuery({
     queryKey: ["feed", userId, limit],
-    queryFn: ({ pageParam }) => api.getFeed(userId!, limit, pageParam ?? null),
+    queryFn: ({ pageParam }) =>
+      userId ? api.getFeed(userId, limit, pageParam ?? null) : api.getGuestFeed(limit, pageParam ?? null),
     getNextPageParam: (lastPage) => lastPage.meta.has_more ? lastPage.meta.next_cursor ?? undefined : undefined,
-    enabled: !!userId,
+    enabled: true,
     initialPageParam: null,
   });
 }
