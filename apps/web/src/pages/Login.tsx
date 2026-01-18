@@ -15,7 +15,16 @@ export function Login() {
     const to = params.get("to");
     if (to) {
       navigate(to, { replace: true });
+      return;
     }
+
+    void (async () => {
+      const { getAccessToken } = await import("../lib/oidc");
+      const token = await getAccessToken();
+      if (token) {
+        navigate("/", { replace: true });
+      }
+    })();
   }, [location.search, navigate]);
 
   const onLogin = async () => {

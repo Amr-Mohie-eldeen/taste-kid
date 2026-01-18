@@ -12,7 +12,7 @@ import { useStore } from "./lib/store";
 import { queryClient } from "./lib/queryClient";
 
 export default function App() {
-  const { resetSession, setApiStatus, setUserId, token, userId } = useStore();
+  const { resetSession, setApiStatus, setUserId, setToken, token, userId } = useStore();
 
   useEffect(() => {
     api
@@ -22,10 +22,58 @@ export default function App() {
   }, [setApiStatus]);
 
   useEffect(() => {
-    if (userId && !token) {
-      resetSession();
-    }
-  }, [resetSession, token, userId]);
+    let cancelled = false;
+
+    (async () => {
+      const { getAccessToken } = await import("./lib/oidc");
+      const accessToken = await getAccessToken();
+
+      if (cancelled) {
+        return;
+      }
+
+      if (!accessToken) {
+        if (token) {
+          resetSession();
+        }
+        return;
+      }
+
+      setToken(accessToken);
+      try {
+        const me = await api.me();
+        setUserId(me.id);
+      } catch {
+        setUserId(null);
+      }
+    })();
+
+    const interval = window.setInterval(() => {
+      void (async () => {
+        const { getAccessToken } = await import("./lib/oidc");
+        const accessToken = await getAccessToken();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (!accessToken) {
+          resetSession();
+          return;
+        }
+
+        if (!token) {
+          setToken(accessToken);
+          return;
+        }
+      })();
+    }, 30000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [resetSession, setToken, setUserId, token]);
 
   return (
     <QueryClientProvider client={queryClient}>

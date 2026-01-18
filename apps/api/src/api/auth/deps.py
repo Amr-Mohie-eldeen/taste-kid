@@ -26,7 +26,12 @@ def get_current_user_id(
     if subject.isdigit():
         return int(subject)
 
-    raise HTTPException(status_code=401, detail="Token subject must be numeric")
+    try:
+        from api.auth.identity import get_or_create_user_id_for_subject
+
+        return get_or_create_user_id_for_subject(provider="keycloak", subject=subject)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 def require_user_access(user_id: int, current_user_id: int = Depends(get_current_user_id)) -> int:
