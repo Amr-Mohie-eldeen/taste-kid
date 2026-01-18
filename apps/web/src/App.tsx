@@ -37,6 +37,10 @@ export default function App() {
       }
 
       if (!accessToken) {
+        const store = useStore.getState();
+        if (store.userId || store.token || store.userProfile) {
+          store.resetSession();
+        }
         return;
       }
 

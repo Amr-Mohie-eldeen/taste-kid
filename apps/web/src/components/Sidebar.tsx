@@ -3,7 +3,7 @@ import { cn } from "../lib/utils";
 import { Button } from "./ui/button";
 import { useStore } from "../lib/store";
 import { queryClient } from "../lib/queryClient";
-import { ensureLoggedIn, logout } from "../lib/oidc";
+import { logout } from "../lib/oidc";
 import {
   Clapperboard,
   History,
@@ -27,7 +27,7 @@ export function Sidebar({ className, onNavigate, collapsed }: SidebarProps) {
 
   const handleAuthAction = async () => {
     if (!userId) {
-      await ensureLoggedIn({ action: "login" });
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -39,7 +39,7 @@ export function Sidebar({ className, onNavigate, collapsed }: SidebarProps) {
     } catch {
     }
 
-    navigate("/", { replace: true });
+    navigate("/login", { replace: true });
   };
 
    const navItems = [

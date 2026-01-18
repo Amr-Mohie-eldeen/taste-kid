@@ -59,7 +59,7 @@ export function ProfilePage() {
                 await logout({ redirectTo: "home" });
               } catch {
               }
-              navigate("/", { replace: true });
+              navigate("/login", { replace: true });
               window.location.reload();
             }}
           >
