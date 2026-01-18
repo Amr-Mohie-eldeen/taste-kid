@@ -168,7 +168,11 @@ async def test_cannot_access_other_users(client: AsyncClient, authed_user):
 
     register_resp = await client.post(
         "/v1/auth/register",
-        json={"email": "other-user@example.com", "password": "password123", "display_name": "Other"},
+        json={
+            "email": "other-user@example.com",
+            "password": "password123",
+            "display_name": "Other",
+        },
     )
     other_user_id = register_resp.json()["data"]["user"]["id"]
 
@@ -177,7 +181,9 @@ async def test_cannot_access_other_users(client: AsyncClient, authed_user):
 
 
 @pytest.mark.asyncio
-async def test_rating_status_combinations(client: AsyncClient, seeded_movies, db_engine, authed_user):
+async def test_rating_status_combinations(
+    client: AsyncClient, seeded_movies, db_engine, authed_user
+):
     user_id, headers = authed_user
     movie_id = seeded_movies["inception_id"]
 
@@ -200,13 +206,13 @@ async def test_rating_status_combinations(client: AsyncClient, seeded_movies, db
 
 
 @pytest.mark.asyncio
-async def test_neutral_rating_creates_profile(client: AsyncClient, seeded_movies, db_engine, authed_user):
+async def test_neutral_rating_creates_profile(
+    client: AsyncClient, seeded_movies, db_engine, authed_user
+):
     user_id, headers = authed_user
     movie_id = seeded_movies["matrix_id"]
 
-    await client.put(
-        f"/v1/users/{user_id}/ratings/{movie_id}", headers=headers, json={"rating": 3}
-    )
+    await client.put(f"/v1/users/{user_id}/ratings/{movie_id}", headers=headers, json={"rating": 3})
 
     assert _profile_exists(db_engine, user_id)
 
@@ -246,7 +252,9 @@ async def test_user_profile_stats(client: AsyncClient, seeded_movies, authed_use
 
 
 @pytest.mark.asyncio
-async def test_profile_embedding_weights(client: AsyncClient, seeded_movies, db_engine, authed_user):  # noqa: ARG001
+async def test_profile_embedding_weights(
+    client: AsyncClient, seeded_movies, db_engine, authed_user
+):  # noqa: ARG001
     """
     Verify that higher ratings shift the profile embedding closer to the movie
     than lower (neutral) ratings.
@@ -333,6 +341,85 @@ async def test_feed_source_switching(client: AsyncClient, seeded_movies, authed_
 
 
 @pytest.mark.asyncio
+async def test_personalized_feed_pagination_has_no_duplicates(
+    client: AsyncClient, seeded_movies, authed_user
+):  # noqa: ARG001
+    user_id, headers = authed_user
+
+    await client.put(
+        f"/v1/users/{user_id}/ratings/{seeded_movies['inception_id']}",
+        headers=headers,
+        json={"rating": 5},
+    )
+
+    page_size = 20
+    resp1 = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor=0",
+        headers=headers,
+    )
+    assert resp1.status_code == 200
+    payload1 = resp1.json()
+    ids1 = [item["id"] for item in payload1["data"]]
+    assert len(ids1) == page_size
+
+    resp2 = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor={page_size}",
+        headers=headers,
+    )
+    assert resp2.status_code == 200
+    payload2 = resp2.json()
+    ids2 = [item["id"] for item in payload2["data"]]
+    assert len(ids2) == page_size
+
+    assert len(set(ids1) & set(ids2)) == 0
+
+
+@pytest.mark.asyncio
+async def test_personalized_feed_does_not_span_windows(
+    client: AsyncClient, seeded_movies, authed_user, monkeypatch
+):  # noqa: ARG001
+    monkeypatch.setattr("api.users.recommendations.MAX_FETCH_CANDIDATES", 50)
+    monkeypatch.setattr(
+        "api.users.recommendations.RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST", 1
+    )
+
+    user_id, headers = authed_user
+
+    await client.put(
+        f"/v1/users/{user_id}/ratings/{seeded_movies['inception_id']}",
+        headers=headers,
+        json={"rating": 5},
+    )
+
+    page_size = 20
+    # cursor=40 is near the end of window 0 when window_size=50.
+    resp = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor=40",
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    items = payload["data"]
+    meta = payload["meta"]
+
+    # We should only return the remaining items in the current window (50 - 40 = 10), not 20.
+    assert len(items) == 10
+    assert meta["has_more"] is True
+    assert meta["next_cursor"] == "50"
+
+    # Next page starts at the next window boundary.
+    resp2 = await client.get(
+        f"/v1/users/{user_id}/feed?k={page_size}&cursor=50",
+        headers=headers,
+    )
+    assert resp2.status_code == 200
+    payload2 = resp2.json()
+    items2 = payload2["data"]
+
+    assert len({item["id"] for item in items} & {item["id"] for item in items2}) == 0
+
+
+@pytest.mark.asyncio
 async def test_state_transitions_and_deletion(
     client: AsyncClient, seeded_movies, db_engine, authed_user
 ):  # noqa: ARG001
@@ -383,7 +470,9 @@ async def test_state_transitions_and_deletion(
 
 
 @pytest.mark.asyncio
-async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine, embedding_dim, authed_user):
+async def test_dislike_penalizes_recommendations(
+    client: AsyncClient, db_engine, embedding_dim, authed_user
+):
     """Verify the dislike vector penalizes recs after threshold.
 
     This test also covers threshold behavior:
@@ -409,11 +498,11 @@ async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine,
 
     inv_sqrt2 = 1.0 / math.sqrt(2.0)
 
-    anchor_id = 100
-    candidate_a_id = 101
-    candidate_b_id = 102
+    anchor_id = 2000
+    candidate_a_id = 2001
+    candidate_b_id = 2002
 
-    dislike_ids = [200 + idx for idx in range(DISLIKE_MIN_COUNT)]
+    dislike_ids = [2100 + idx for idx in range(DISLIKE_MIN_COUNT)]
 
     movies = [
         {"id": anchor_id, "title": "Anchor", "embedding": vec(1.0, 0.0)},

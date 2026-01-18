@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+import uuid
 
 from pgvector.psycopg import Vector
 from sqlalchemy import text
@@ -9,7 +11,8 @@ from api.config import (
     DISLIKE_MIN_COUNT,
     DISLIKE_WEIGHT,
     MAX_FETCH_CANDIDATES,
-    RERANK_FETCH_MULTIPLIER,
+    RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST,
+    RECOMMENDATIONS_CACHE_TTL_S,
     USER_UNWATCHED_COOLDOWN_DAYS,
 )
 from api.db import get_engine
@@ -20,40 +23,55 @@ from api.users.embeddings import (
     _dislike_weight,
     _fetch_disliked_embeddings,
 )
+from api.users.feed_cache import _CACHE, FeedCacheEntry
 from api.users.scoring import _build_user_dislike_context, _build_user_scoring_context
 from api.users.types import Recommendation
+
+
+def _paginate_windows(
+    *,
+    items: list[Recommendation],
+    cursor: int,
+    page_size: int,
+    window_size: int,
+) -> tuple[list[Recommendation], dict[str, object]]:
+    if cursor >= len(items):
+        return [], {"next_cursor": None, "has_more": False}
+
+    window_index = cursor // window_size
+    window_end = min((window_index + 1) * window_size, len(items))
+    page_end = min(cursor + page_size, window_end)
+
+    page_items = items[cursor:page_end]
+
+    if page_end < window_end:
+        return page_items, {"next_cursor": str(page_end), "has_more": True}
+
+    next_window_start = (window_index + 1) * window_size
+    return page_items, {"next_cursor": str(next_window_start), "has_more": True}
+
 
 logger = logging.getLogger("api")
 
 
-def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
-    ensure_user(user_id)
+def _recommendation_cache_key(user_id: int) -> str:
+    return f"recs:{user_id}"
+
+
+def invalidate_recommendations_cache(user_id: int) -> None:
+    _CACHE.delete(_recommendation_cache_key(user_id))
+
+
+def _fetch_recommendation_window(
+    *,
+    user_id: int,
+    embedding,
+    dislike_embedding: Vector | None,
+    apply_dislike: bool,
+    window_size: int,
+    window_index: int,
+) -> list[Recommendation]:
     engine = get_engine()
-    q_profile = text("SELECT embedding AS embedding FROM user_profiles WHERE user_id = :user_id")
-    with engine.begin() as conn:
-        profile = conn.execute(q_profile, {"user_id": user_id}).first()
-    if profile is None:
-        return []
-
-    embedding = profile[0]
-
-    dislike_rows = _fetch_disliked_embeddings(user_id)
-    dislike_embedding = None
-    if len(dislike_rows) >= DISLIKE_MIN_COUNT:
-        raw_dislike_embedding = _build_weighted_embedding(dislike_rows, _dislike_weight)
-        if raw_dislike_embedding is not None:
-            dislike_embedding = Vector(raw_dislike_embedding)
-
-    dislike_ctx, dislike_ctx_count = _build_user_dislike_context(user_id)
-    apply_dislike = (
-        dislike_embedding is not None
-        and dislike_ctx is not None
-        and min(len(dislike_rows), dislike_ctx_count) >= DISLIKE_MIN_COUNT
-    )
-
-    # Fetch more candidates than needed to allow reranking to select the best matches.
-    # The multiplier balances candidate diversity with query performance, but capped to prevent excessive load.
-    fetch_limit = min(limit * RERANK_FETCH_MULTIPLIER, MAX_FETCH_CANDIDATES)
 
     if apply_dislike:
         q = text(
@@ -82,6 +100,14 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
             OFFSET :offset
             """
         )
+        params: dict[str, object] = {
+            "user_id": user_id,
+            "embedding": embedding,
+            "dislike_embedding": dislike_embedding,
+            "limit": window_size,
+            "offset": window_index * window_size,
+            "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+        }
     else:
         q = text(
             """
@@ -109,31 +135,36 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
             OFFSET :offset
             """
         )
-    params: dict[str, object] = {
-        "user_id": user_id,
-        "embedding": embedding,
-        "limit": fetch_limit,
-        "offset": offset,
-        "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
-    }
-    if apply_dislike:
-        params["dislike_embedding"] = dislike_embedding
+        params = {
+            "user_id": user_id,
+            "embedding": embedding,
+            "limit": window_size,
+            "offset": window_index * window_size,
+            "cooldown_days": USER_UNWATCHED_COOLDOWN_DAYS,
+        }
 
     with engine.begin() as conn:
         rows = conn.execute(q, params).mappings().all()
 
-    candidates = [Recommendation(**row) for row in rows]
-    if not candidates:
-        return []
+    return [Recommendation(**row) for row in rows]
 
+
+def _rerank_candidates(
+    *,
+    user_id: int,
+    candidates: list[Recommendation],
+    apply_dislike: bool,
+    dislike_ctx,
+) -> tuple[list[Recommendation], dict[int, float], dict[int, float]]:
     user_ctx = _build_user_scoring_context(user_id)
     if not user_ctx:
-        results = candidates[:limit]
-        for item in results:
+        for item in candidates:
             item.similarity = 1.0 - item.distance
-        return results
+        return candidates, {}, {}
 
-    max_vote_count = max((candidate.vote_count or 0) for candidate in candidates)
+    max_vote_count = (
+        max((candidate.vote_count or 0) for candidate in candidates) if candidates else 0
+    )
     like_scores: dict[int, float] = {}
     dislike_scores: dict[int, float] = {}
 
@@ -175,27 +206,103 @@ def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recom
             -(item.vote_count or 0),
         )
     )
-    results = candidates[:limit]
-    if results:
-        log_sample = results[:10]
+    return candidates, like_scores, dislike_scores
+
+
+def get_recommendations_page(
+    user_id: int, page_size: int, cursor: int
+) -> tuple[list[Recommendation], dict[str, object]]:
+    ensure_user(user_id)
+
+    engine = get_engine()
+    q_profile = text("SELECT embedding AS embedding FROM user_profiles WHERE user_id = :user_id")
+    with engine.begin() as conn:
+        profile = conn.execute(q_profile, {"user_id": user_id}).first()
+    if profile is None:
+        return [], {"next_cursor": None, "has_more": False}
+
+    embedding = profile[0]
+
+    dislike_rows = _fetch_disliked_embeddings(user_id)
+    dislike_embedding = None
+    if len(dislike_rows) >= DISLIKE_MIN_COUNT:
+        raw_dislike_embedding = _build_weighted_embedding(dislike_rows, _dislike_weight)
+        if raw_dislike_embedding is not None:
+            dislike_embedding = Vector(raw_dislike_embedding)
+
+    dislike_ctx, dislike_ctx_count = _build_user_dislike_context(user_id)
+    apply_dislike = (
+        dislike_embedding is not None
+        and dislike_ctx is not None
+        and min(len(dislike_rows), dislike_ctx_count) >= DISLIKE_MIN_COUNT
+    )
+
+    window_size = MAX_FETCH_CANDIDATES
+    window_index = cursor // window_size
+
+    cache_key = _recommendation_cache_key(user_id)
+    cached = _CACHE.get(cache_key)
+    cached_items: list[Recommendation] = list(cached.items) if cached is not None else []
+
+    needed_end = (window_index + 1) * window_size
+    if len(cached_items) < needed_end:
+        missing_windows_start = len(cached_items) // window_size
+        max_windows = max(1, RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST)
+        for idx in range(missing_windows_start, missing_windows_start + max_windows):
+            window_candidates = _fetch_recommendation_window(
+                user_id=user_id,
+                embedding=embedding,
+                dislike_embedding=dislike_embedding,
+                apply_dislike=apply_dislike,
+                window_size=window_size,
+                window_index=idx,
+            )
+            if not window_candidates:
+                break
+
+            reranked, _like, _dislike = _rerank_candidates(
+                user_id=user_id,
+                candidates=window_candidates,
+                apply_dislike=apply_dislike,
+                dislike_ctx=dislike_ctx,
+            )
+            cached_items.extend(reranked)
+            if len(window_candidates) < window_size:
+                break
+
+        if RECOMMENDATIONS_CACHE_TTL_S > 0:
+            now = time.time()
+            entry = FeedCacheEntry(
+                feed_id=str(uuid.uuid4()),
+                expires_at=now + RECOMMENDATIONS_CACHE_TTL_S,
+                items=cached_items,
+            )
+            _CACHE.set(cache_key, entry)
+
+    items, meta = _paginate_windows(
+        items=cached_items,
+        cursor=cursor,
+        page_size=page_size,
+        window_size=window_size,
+    )
+
+    if items:
         logger.info(
-            "recommendation_rerank",
+            "recommendation_page",
             extra={
                 "user_id": user_id,
                 "apply_dislike": apply_dislike,
                 "dislike_count": dislike_ctx_count,
-                "result_count": len(results),
-                "scores": [
-                    {
-                        "movie_id": item.id,
-                        "score": round(item.score or 0.0, 4),
-                        "like_score": round(like_scores.get(item.id, 0.0), 4),
-                        "dislike_score": round(dislike_scores[item.id], 4)
-                        if item.id in dislike_scores
-                        else None,
-                    }
-                    for item in log_sample
-                ],
+                "cursor": cursor,
+                "page_size": page_size,
+                "window_size": window_size,
+                "returned": len(items),
             },
         )
-    return results
+
+    return items, meta
+
+
+def get_recommendations(user_id: int, limit: int, offset: int = 0) -> list[Recommendation]:
+    items, _meta = get_recommendations_page(user_id, limit, offset)
+    return items

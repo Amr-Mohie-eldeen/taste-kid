@@ -92,9 +92,8 @@ def db_engine(postgres_container):
 
 @pytest.fixture(scope="function")
 def db_session(db_engine):
-    # Truncate tables to ensure clean state for each test
     with db_engine.begin() as conn:
-        conn.execute(text("TRUNCATE TABLE user_movie_ratings, users CASCADE"))
+        conn.execute(text("TRUNCATE TABLE user_movie_ratings, user_profiles, users CASCADE"))
     yield db_engine
 
 
@@ -119,8 +118,28 @@ def embedding_dim(db_engine) -> int:
 
 @pytest.fixture(scope="session")
 def seeded_movies(db_engine, embedding_dim):
-    # Insert 3 movies with embeddings for similarity tests
+    def _basis_embedding(index: int) -> list[float]:
+        values = [0.0] * embedding_dim
+        values[index % embedding_dim] = 1.0
+        return values
+
     movies = [
+        *[
+            {
+                "id": 1000 + i,
+                "title": f"Movie {i}",
+                "vote_average": 7.0,
+                "vote_count": 1000 + i,
+                "status": "Released",
+                "release_date": "2000-01-01",
+                "runtime": 100,
+                "original_language": "en",
+                "genres": "Action",
+                "keywords": "test",
+                "embedding": _basis_embedding(i),
+            }
+            for i in range(1, 101)
+        ],
         {
             "id": 1,
             "title": "Inception",
