@@ -6,7 +6,9 @@ def _auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-async def _register(client: AsyncClient, email: str, display_name: str) -> tuple[int, dict[str, str]]:
+async def _register(
+    client: AsyncClient, email: str, display_name: str
+) -> tuple[int, dict[str, str]]:
     resp = await client.post(
         "/v1/auth/register",
         json={"email": email, "password": "password123", "display_name": display_name},

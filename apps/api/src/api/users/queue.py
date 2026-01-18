@@ -141,7 +141,9 @@ def get_next_movie(user_id: int) -> NextMovie | None:
     return _get_next_from_popularity(user_id)
 
 
-def get_feed(user_id: int, limit: int, offset: int = 0) -> tuple[list[FeedItem], dict[str, object] | None]:
+def get_feed(
+    user_id: int, limit: int, offset: int = 0
+) -> tuple[list[FeedItem], dict[str, object] | None]:
     ensure_user(user_id)
     engine = get_engine()
     q_profile = text("SELECT 1 FROM user_profiles WHERE user_id = :user_id")

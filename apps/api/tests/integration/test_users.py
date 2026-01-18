@@ -168,7 +168,11 @@ async def test_cannot_access_other_users(client: AsyncClient, authed_user):
 
     register_resp = await client.post(
         "/v1/auth/register",
-        json={"email": "other-user@example.com", "password": "password123", "display_name": "Other"},
+        json={
+            "email": "other-user@example.com",
+            "password": "password123",
+            "display_name": "Other",
+        },
     )
     other_user_id = register_resp.json()["data"]["user"]["id"]
 
@@ -177,7 +181,9 @@ async def test_cannot_access_other_users(client: AsyncClient, authed_user):
 
 
 @pytest.mark.asyncio
-async def test_rating_status_combinations(client: AsyncClient, seeded_movies, db_engine, authed_user):
+async def test_rating_status_combinations(
+    client: AsyncClient, seeded_movies, db_engine, authed_user
+):
     user_id, headers = authed_user
     movie_id = seeded_movies["inception_id"]
 
@@ -200,13 +206,13 @@ async def test_rating_status_combinations(client: AsyncClient, seeded_movies, db
 
 
 @pytest.mark.asyncio
-async def test_neutral_rating_creates_profile(client: AsyncClient, seeded_movies, db_engine, authed_user):
+async def test_neutral_rating_creates_profile(
+    client: AsyncClient, seeded_movies, db_engine, authed_user
+):
     user_id, headers = authed_user
     movie_id = seeded_movies["matrix_id"]
 
-    await client.put(
-        f"/v1/users/{user_id}/ratings/{movie_id}", headers=headers, json={"rating": 3}
-    )
+    await client.put(f"/v1/users/{user_id}/ratings/{movie_id}", headers=headers, json={"rating": 3})
 
     assert _profile_exists(db_engine, user_id)
 
@@ -246,7 +252,9 @@ async def test_user_profile_stats(client: AsyncClient, seeded_movies, authed_use
 
 
 @pytest.mark.asyncio
-async def test_profile_embedding_weights(client: AsyncClient, seeded_movies, db_engine, authed_user):  # noqa: ARG001
+async def test_profile_embedding_weights(
+    client: AsyncClient, seeded_movies, db_engine, authed_user
+):  # noqa: ARG001
     """
     Verify that higher ratings shift the profile embedding closer to the movie
     than lower (neutral) ratings.
@@ -333,7 +341,9 @@ async def test_feed_source_switching(client: AsyncClient, seeded_movies, authed_
 
 
 @pytest.mark.asyncio
-async def test_personalized_feed_pagination_has_no_duplicates(client: AsyncClient, seeded_movies, authed_user):  # noqa: ARG001
+async def test_personalized_feed_pagination_has_no_duplicates(
+    client: AsyncClient, seeded_movies, authed_user
+):  # noqa: ARG001
     user_id, headers = authed_user
 
     await client.put(
@@ -365,9 +375,13 @@ async def test_personalized_feed_pagination_has_no_duplicates(client: AsyncClien
 
 
 @pytest.mark.asyncio
-async def test_personalized_feed_does_not_span_windows(client: AsyncClient, seeded_movies, authed_user, monkeypatch):  # noqa: ARG001
+async def test_personalized_feed_does_not_span_windows(
+    client: AsyncClient, seeded_movies, authed_user, monkeypatch
+):  # noqa: ARG001
     monkeypatch.setattr("api.users.recommendations.MAX_FETCH_CANDIDATES", 50)
-    monkeypatch.setattr("api.users.recommendations.RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST", 1)
+    monkeypatch.setattr(
+        "api.users.recommendations.RECOMMENDATIONS_CACHE_MAX_WINDOWS_PER_REQUEST", 1
+    )
 
     user_id, headers = authed_user
 
@@ -402,7 +416,7 @@ async def test_personalized_feed_does_not_span_windows(client: AsyncClient, seed
     payload2 = resp2.json()
     items2 = payload2["data"]
 
-    assert len(set(item["id"] for item in items) & set(item["id"] for item in items2)) == 0
+    assert len({item["id"] for item in items} & {item["id"] for item in items2}) == 0
 
 
 @pytest.mark.asyncio
@@ -456,7 +470,9 @@ async def test_state_transitions_and_deletion(
 
 
 @pytest.mark.asyncio
-async def test_dislike_penalizes_recommendations(client: AsyncClient, db_engine, embedding_dim, authed_user):
+async def test_dislike_penalizes_recommendations(
+    client: AsyncClient, db_engine, embedding_dim, authed_user
+):
     """Verify the dislike vector penalizes recs after threshold.
 
     This test also covers threshold behavior:

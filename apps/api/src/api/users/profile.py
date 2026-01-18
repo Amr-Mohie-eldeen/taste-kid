@@ -9,8 +9,8 @@ from api.users.embeddings import (
     _fetch_profile_embeddings,
     _profile_weight,
 )
-from api.users.recommendations import invalidate_recommendations_cache
 from api.users.ratings import _count_liked_ratings, _count_watched_ratings
+from api.users.recommendations import invalidate_recommendations_cache
 from api.users.types import ProfileStats
 
 

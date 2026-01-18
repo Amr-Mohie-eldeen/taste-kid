@@ -15,6 +15,17 @@ from api.config import (
     RECOMMENDATIONS_CACHE_TTL_S,
     USER_UNWATCHED_COOLDOWN_DAYS,
 )
+from api.db import get_engine
+from api.rerank.scorer import build_context, score_candidate
+from api.users.db import ensure_user
+from api.users.embeddings import (
+    _build_weighted_embedding,
+    _dislike_weight,
+    _fetch_disliked_embeddings,
+)
+from api.users.feed_cache import _CACHE, FeedCacheEntry
+from api.users.scoring import _build_user_dislike_context, _build_user_scoring_context
+from api.users.types import Recommendation
 
 
 def _paginate_windows(
@@ -38,17 +49,7 @@ def _paginate_windows(
 
     next_window_start = (window_index + 1) * window_size
     return page_items, {"next_cursor": str(next_window_start), "has_more": True}
-from api.db import get_engine
-from api.rerank.scorer import build_context, score_candidate
-from api.users.db import ensure_user
-from api.users.embeddings import (
-    _build_weighted_embedding,
-    _dislike_weight,
-    _fetch_disliked_embeddings,
-)
-from api.users.feed_cache import FeedCacheEntry, _CACHE
-from api.users.scoring import _build_user_dislike_context, _build_user_scoring_context
-from api.users.types import Recommendation
+
 
 logger = logging.getLogger("api")
 
@@ -154,7 +155,6 @@ def _rerank_candidates(
     candidates: list[Recommendation],
     apply_dislike: bool,
     dislike_ctx,
-    dislike_ctx_count: int,
 ) -> tuple[list[Recommendation], dict[int, float], dict[int, float]]:
     user_ctx = _build_user_scoring_context(user_id)
     if not user_ctx:
@@ -162,7 +162,9 @@ def _rerank_candidates(
             item.similarity = 1.0 - item.distance
         return candidates, {}, {}
 
-    max_vote_count = max((candidate.vote_count or 0) for candidate in candidates) if candidates else 0
+    max_vote_count = (
+        max((candidate.vote_count or 0) for candidate in candidates) if candidates else 0
+    )
     like_scores: dict[int, float] = {}
     dislike_scores: dict[int, float] = {}
 
@@ -263,7 +265,6 @@ def get_recommendations_page(
                 candidates=window_candidates,
                 apply_dislike=apply_dislike,
                 dislike_ctx=dislike_ctx,
-                dislike_ctx_count=dislike_ctx_count,
             )
             cached_items.extend(reranked)
             if len(window_candidates) < window_size:

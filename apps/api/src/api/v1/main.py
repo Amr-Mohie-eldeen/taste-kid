@@ -35,7 +35,6 @@ from api.users import (
     get_next_movie,
     get_profile_stats,
     get_rating_queue,
-    get_recommendations,
     get_recommendations_page,
     get_user_movie_match,
     get_user_ratings,
