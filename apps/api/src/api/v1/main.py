@@ -14,6 +14,9 @@ from api.auth.deps import get_current_user_id, require_user_access
 from api.auth.jwt import create_access_token
 from api.auth.passwords import hash_password
 from api.config import (
+    KEYCLOAK_AUDIENCE,
+    KEYCLOAK_ISSUER_URL,
+    KEYCLOAK_JWKS_URL,
     SIM_CANDIDATES_K,
     SIM_RERANK_ENABLED,
     SIM_TOP_N,
@@ -289,10 +292,20 @@ def movie_detail(movie_id: int):
     return _envelope(MovieDetailResponse(**payload))
 
 
+def _keycloak_enabled() -> bool:
+    return bool(KEYCLOAK_ISSUER_URL and KEYCLOAK_JWKS_URL and KEYCLOAK_AUDIENCE)
+
+
 @router.post("/auth/register", response_model=ResponseEnvelope[AuthTokenResponse])
 @limiter.limit(register_rate_limit)
 def register(request: Request, payload: AuthRegisterRequest):
     _ = request
+    if _keycloak_enabled():
+        raise HTTPException(
+            status_code=410,
+            detail="Registration is managed by the identity provider",
+        )
+
     try:
         user_id = register_user(
             email=payload.email,
@@ -313,6 +326,9 @@ def register(request: Request, payload: AuthRegisterRequest):
 @limiter.limit(login_rate_limit)
 def login(request: Request, payload: AuthLoginRequest):
     _ = request
+    if _keycloak_enabled():
+        raise HTTPException(status_code=410, detail="Login is managed by the identity provider")
+
     try:
         user_id = authenticate_user(email=payload.email, password=payload.password)
     except InvalidCredentialsError as exc:

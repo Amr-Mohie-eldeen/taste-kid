@@ -20,10 +20,18 @@ def get_current_user_id(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
     subject = payload.get("sub")
-    if not isinstance(subject, str) or not subject.isdigit():
+    if not isinstance(subject, str) or not subject:
         raise HTTPException(status_code=401, detail="Invalid token subject")
 
-    return int(subject)
+    if subject.isdigit():
+        return int(subject)
+
+    try:
+        from api.auth.identity import get_or_create_user_id_for_subject
+
+        return get_or_create_user_id_for_subject(provider="keycloak", subject=subject)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 
 def require_user_access(user_id: int, current_user_id: int = Depends(get_current_user_id)) -> int:

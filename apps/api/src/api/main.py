@@ -31,10 +31,38 @@ logger = logging.getLogger("api")
 app = FastAPI(title="TMDB RecSys API")
 app.state.limiter = limiter
 
+
+def _run_startup_migrations() -> None:
+    from sqlalchemy import text
+
+    from api.db import get_engine
+
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS user_identities (
+                  provider TEXT NOT NULL,
+                  subject TEXT NOT NULL,
+                  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                  PRIMARY KEY (provider, subject),
+                  UNIQUE (user_id)
+                );
+                """
+            )
+        )
+
+
+@app.on_event("startup")
+def _startup() -> None:
+    _run_startup_migrations()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=FRONTEND_ORIGINS,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     max_age=600,

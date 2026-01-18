@@ -62,10 +62,10 @@ export function Rate({ nextMovie, ratingQueue, loading, onRateMovie }: RateProps
                         className="rounded-xl px-6 font-bold text-xs uppercase tracking-wider"
                         onClick={() => onRateMovie(nextMovie.id, null, "unwatched")}
                       >
-                        Skip for now
+                        Didn't Watch
                       </Button>
                       <Button variant="ghost" className="rounded-xl px-6 font-bold text-xs uppercase tracking-wider" asChild>
-                        <Link to={`/movie/${nextMovie.id}`}>Inspect Metadata</Link>
+                        <Link to={`/movie/${nextMovie.id}`}>Details</Link>
                       </Button>
                     </div>
                   </div>

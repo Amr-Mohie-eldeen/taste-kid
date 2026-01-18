@@ -10,12 +10,6 @@ export type UserSummary = {
   profile_updated_at: string | null;
 };
 
-export type AuthTokenResponse = {
-  access_token: string;
-  token_type: string;
-  user: UserSummary;
-};
-
 export type MovieLookup = { id: number; title: string | null };
 
 export type MovieDetail = {
@@ -160,8 +154,15 @@ async function fetchEnvelope<T>(path: string, options?: RequestInit): Promise<Ap
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
+  } else {
+    const { getAccessToken } = await import("./oidc");
+    const accessToken = await getAccessToken();
+    if (accessToken) {
+      headers.set("Authorization", `Bearer ${accessToken}`);
+    }
   }
 
   const response = await fetch(`${API_URL}${path}`, {
@@ -220,16 +221,6 @@ async function requestPaginated<T>(path: string, options?: RequestInit): Promise
 
 export const api = {
   health: () => request<{ status: string }>("/health"),
-  register: (email: string, password: string, display_name: string | null) =>
-    request<AuthTokenResponse>("/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, password, display_name }),
-    }),
-  login: (email: string, password: string) =>
-    request<AuthTokenResponse>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
   me: () => request<UserSummary>("/auth/me"),
   createUser: (display_name: string | null) =>
     request<UserSummary>("/users", {

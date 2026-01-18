@@ -63,6 +63,15 @@ CREATE TABLE IF NOT EXISTS user_credentials (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS user_identities (
+  provider TEXT NOT NULL,
+  subject TEXT NOT NULL,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (provider, subject),
+  UNIQUE (user_id)
+);
+
 CREATE TABLE IF NOT EXISTS user_movie_ratings (
   user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   movie_id BIGINT NOT NULL REFERENCES movies(id) ON DELETE CASCADE,

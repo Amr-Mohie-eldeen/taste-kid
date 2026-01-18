@@ -11,6 +11,8 @@ import {
   useLogin,
   useMovieSearch,
 } from "../lib/hooks";
+import { ensureLoggedIn, logout } from "../lib/oidc";
+import { queryClient } from "../lib/queryClient";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
@@ -32,6 +34,8 @@ import {
   Star,
   UserPlus,
   Zap,
+  User,
+  LogOut,
 } from "lucide-react";
 
 import { useStore } from "../lib/store";
@@ -42,12 +46,7 @@ type DashboardProps = {
 };
 
 export function Dashboard({ userId, setUserId }: DashboardProps) {
-  const resetSession = useStore((state) => state.resetSession);
-  const [displayName, setDisplayName] = useState("");
-  const [registerEmail, setRegisterEmail] = useState("");
-  const [registerPassword, setRegisterPassword] = useState("");
-  const [loginEmail, setLoginEmail] = useState("");
-  const [loginPassword, setLoginPassword] = useState("");
+  const { resetSession, userProfile } = useStore();
   const [activeTab, setActiveTab] = useState("feed");
   
   const feedPageSize = 20;
@@ -90,8 +89,6 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
   } = useMovieSearch(searchQuery, isSearchEnabled);
 
   // Mutations
-  const createUser = useCreateUser();
-  const login = useLogin();
   const rateMovie = useRateMovie();
 
   const feedItems = useMemo(
@@ -155,29 +152,15 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
     setIsSearchEnabled(true);
   };
 
-  const handleCreateUser = () => {
-    createUser.mutate({
-      email: registerEmail.trim(),
-      password: registerPassword,
-      displayName: displayName.trim() || null,
-    });
-  };
-
-  const handleLogin = () => {
-    login.mutate({
-      email: loginEmail.trim(),
-      password: loginPassword,
-    });
-  };
 
   const handleRateMovie = (movieId: number, rating: number | null, status: string) => {
     if (!userId) return;
     rateMovie.mutate({ userId, movieId, rating, status });
   };
 
-  const ratingsCount = ratingsItems.filter((r) => r.status === "watched").length
-    || userSummary?.num_ratings
-    || 0;
+  const ratingsCount = userSummary?.num_ratings
+    ?? profileStats?.num_ratings
+    ?? ratingsItems.filter((r) => r.status === "watched" && r.rating !== null).length;
   
   const gridClass = useMemo(
     () => "grid auto-rows-fr gap-6 sm:grid-cols-2 lg:grid-cols-3",
@@ -271,120 +254,83 @@ export function Dashboard({ userId, setUserId }: DashboardProps) {
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-2 text-primary mb-1">
                   <Zap className="h-4 w-4 fill-primary" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Quick Start</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider">Session</span>
                 </div>
-                <CardTitle className="text-xl">Initialize Profile</CardTitle>
-                <CardDescription className="text-xs">Create a new identity or load an existing one.</CardDescription>
+                <CardTitle className="text-xl">Sign in to continue</CardTitle>
+                <CardDescription className="text-xs">Authentication is handled by the identity provider.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Email"
-                    value={registerEmail}
-                    onChange={(event) => setRegisterEmail(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Input
-                    placeholder="Password"
-                    type="password"
-                    value={registerPassword}
-                    onChange={(event) => setRegisterPassword(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Input
-                    placeholder="Identity Name"
-                    value={displayName}
-                    onChange={(event) => setDisplayName(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Button 
-                    onClick={handleCreateUser} 
-                    disabled={createUser.isPending}
-                    className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
-                  >
-                    <UserPlus className="h-4 w-4" />
-                    Create Account
-                  </Button>
-                </div>
-                <div className="relative py-2">
-                  <div className="absolute inset-0 flex items-center">
-                    <Separator />
-                  </div>
-                  <div className="relative flex justify-center text-[10px] uppercase font-bold">
-                    <span className="bg-background px-2 text-muted-foreground">OR</span>
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Input
-                    placeholder="Email"
-                    value={loginEmail}
-                    onChange={(event) => setLoginEmail(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Input
-                    placeholder="Password"
-                    type="password"
-                    value={loginPassword}
-                    onChange={(event) => setLoginPassword(event.target.value)}
-                    className="h-10 rounded-xl bg-background border-border/60"
-                  />
-                  <Button 
-                    variant="secondary" 
-                    onClick={handleLogin}
-                    disabled={login.isPending}
-                    className="w-full h-10 rounded-xl gap-2 font-bold"
-                  >
-                    <LogIn className="h-4 w-4" />
-                    Sign In
-                  </Button>
-                </div>
+              <CardContent className="space-y-3">
+                <Button
+                  onClick={() => ensureLoggedIn({ action: "login" })}
+                  className="w-full h-10 rounded-xl gap-2 font-bold shadow-md shadow-primary/20"
+                >
+                  <LogIn className="h-4 w-4" />
+                  Continue with Login
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => ensureLoggedIn({ action: "register" })}
+                  className="w-full h-10 rounded-xl gap-2 font-bold"
+                >
+                  <UserPlus className="h-4 w-4" />
+                  Create Account
+                </Button>
                 {summaryError && (
                   <p className="text-[11px] font-medium text-destructive bg-destructive/5 p-2 rounded-lg border border-destructive/10 text-center">
-                    Authentication failed. Check your ID.
+                    Authentication failed.
                   </p>
                 )}
               </CardContent>
             </Card>
           ) : (
             <Card className="border-border/40 shadow-sm rounded-3xl overflow-hidden">
-              <CardHeader className="pb-4">
-                <div className="flex items-center gap-2 text-muted-foreground mb-1">
-                  <Zap className="h-4 w-4" />
-                  <span className="text-[10px] font-bold uppercase tracking-wider">Profile Status</span>
+              <CardHeader className="pb-4 relative">
+                <div className="flex items-center justify-between">
+                   <div className="flex items-center gap-2 text-muted-foreground mb-1">
+                    <User className="h-4 w-4" />
+                    <span className="text-[10px] font-bold uppercase tracking-wider">Your Profile</span>
+                  </div>
+                   <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={async () => {
+                      resetSession();
+                      queryClient.clear();
+                      try {
+                        await logout({ redirectTo: "home" });
+                      } catch {
+                        window.location.assign("/");
+                      }
+                    }}
+                    className="h-8 w-8 p-0 rounded-full text-muted-foreground hover:text-destructive absolute right-4 top-4"
+                    title="Sign out"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
                 </div>
-                <CardTitle className="text-xl">Taste Metrics</CardTitle>
-                <CardDescription className="text-xs">Real-time profile vector analysis.</CardDescription>
+                
+                <CardTitle className="text-xl truncate pr-8">
+                  {userProfile?.name || userProfile?.email || "My Account"}
+                </CardTitle>
+                <CardDescription className="text-xs truncate">
+                  {userProfile?.name ? userProfile.email : "Real-time profile vector analysis."}
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-3">
                 <StatCard 
-                  label="Computed Ratings" 
+                  label="Ratings" 
                   value={ratingsCount} 
                   className="rounded-2xl"
                 />
                 <StatCard 
-                  label="Liked Patterns" 
+                  label="Favorites" 
                   value={profileStats?.num_liked ?? 0} 
-                  className="rounded-2xl"
-                />
-                <StatCard 
-                  label="Vector Norm" 
-                  value={profileStats?.embedding_norm?.toFixed(3)} 
-                  hint="Confidence"
                   className="rounded-2xl"
                 />
                 <div className="mt-2 text-center">
                   <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     Last Synced: {profileStats?.updated_at ? formatDate(profileStats.updated_at) : "Never"}
                   </p>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => resetSession()}
-                      className="mt-4 text-[10px] h-7 font-bold uppercase tracking-wider text-muted-foreground hover:text-destructive"
-                    >
-
-                    Terminate Session
-                  </Button>
                 </div>
               </CardContent>
             </Card>

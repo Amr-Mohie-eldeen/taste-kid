@@ -42,8 +42,8 @@ export function PageHeader({ title, subtitle, userId }: PageHeaderProps) {
                 <span className="text-xs font-bold">U</span>
               </div>
               <div className="flex flex-col">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Active Session</span>
-                <span className="text-sm font-bold text-foreground">User {userId}</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Account</span>
+                <span className="text-sm font-bold text-foreground">Signed in</span>
               </div>
             </div>
           </div>
