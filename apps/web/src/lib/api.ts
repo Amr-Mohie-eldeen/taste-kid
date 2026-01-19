@@ -10,6 +10,12 @@ export type UserSummary = {
   profile_updated_at: string | null;
 };
 
+export type AuthTokenResponse = {
+  access_token: string;
+  token_type: string;
+  user: UserSummary;
+};
+
 export type MovieLookup = { id: number; title: string | null };
 
 export type MovieDetail = {
@@ -224,6 +230,16 @@ async function requestPaginated<T>(path: string, options?: RequestInit): Promise
 
 export const api = {
   health: () => request<{ status: string }>("/health"),
+  login: (email: string, password: string) =>
+    request<AuthTokenResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+  register: (email: string, password: string, display_name: string | null) =>
+    request<AuthTokenResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, display_name }),
+    }),
   me: () => request<UserSummary>("/auth/me"),
   createUser: (display_name: string | null) =>
     request<UserSummary>("/users", {

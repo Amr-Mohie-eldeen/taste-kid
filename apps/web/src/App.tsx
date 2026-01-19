@@ -29,15 +29,14 @@ export default function App() {
     let cancelled = false;
 
     void (async () => {
-      const storeToken = useStore.getState().token;
-      const accessToken = storeToken ?? (await (await import("./lib/oidc")).getAccessToken());
+      const accessToken = useStore.getState().token;
 
       if (cancelled) {
         return;
       }
 
+      const store = useStore.getState();
       if (!accessToken) {
-        const store = useStore.getState();
         if (store.userId || store.token || store.userProfile) {
           store.resetSession();
         }
@@ -47,25 +46,16 @@ export default function App() {
       setToken(accessToken);
 
       try {
-        const { oidc } = await import("./lib/oidc");
-        const oidcState = await oidc.getOidc();
-        if (oidcState.isUserLoggedIn) {
-          const profile = oidcState.getDecodedIdToken();
-          useStore.getState().setUserProfile({
-            name: profile.name,
-            email: profile.email,
-            preferred_username: profile.preferred_username,
-          });
-        }
-      } catch {
-      }
-
-      try {
         const me = await api.me();
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
         setUserId(me.id);
       } catch {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
+        store.resetSession();
       }
     })();
 

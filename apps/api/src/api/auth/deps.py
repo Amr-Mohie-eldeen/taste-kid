@@ -29,7 +29,7 @@ def get_current_user_id(
     try:
         from api.auth.identity import get_or_create_user_id_for_subject
 
-        return get_or_create_user_id_for_subject(provider="keycloak", subject=subject)
+        return get_or_create_user_id_for_subject(provider="keycloak", subject=subject, display_name=None)
     except Exception as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 

@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate, Link } from "react-router-dom";
 import { Loader2, Film } from "lucide-react";
 import { api } from "../lib/api";
-import { authApi } from "../lib/auth-api";
+
 import { useStore } from "../lib/store";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -34,34 +34,14 @@ export function Login() {
   const onSubmit = async (data: LoginForm) => {
     setError(null);
     try {
-      const response = await authApi.login(data.email, data.password);
-      
-      try {
-        const parts = response.id_token.split(".");
-        if (parts.length === 3) {
-          const payload = JSON.parse(atob(parts[1]));
-          setUserProfile({
-            name: payload.name,
-            email: payload.email,
-            preferred_username: payload.preferred_username,
-          });
-        }
-      } catch (e) {
-        console.error("Failed to decode token", e);
-      }
+      const response = await api.login(data.email, data.password);
 
       setToken(response.access_token);
+      setUserId(response.user.id);
+      setUserProfile(null);
       setApiStatus("online");
 
-      try {
-        const me = await api.me();
-        if (me?.id) {
-          setUserId(me.id);
-        }
-      } catch {
-      }
-
-      navigate("/dashboard");
+      navigate("/");
     } catch (e) {
       console.error(e);
       setError(e instanceof Error ? e.message : "Invalid email or password");

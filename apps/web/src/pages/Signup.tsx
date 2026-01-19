@@ -4,7 +4,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link } from "react-router-dom";
 import { Loader2, Film } from "lucide-react";
-import { ensureLoggedIn } from "../lib/oidc";
+import { api } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { cn } from "../lib/utils";
@@ -35,9 +35,8 @@ export function Signup() {
   });
 
   const onSubmit = async (data: SignupForm) => {
-    void data;
     setSuccess(true);
-    await ensureLoggedIn({ action: "register" });
+    await api.register(data.email, data.password, data.name);
   };
 
   if (success) {
