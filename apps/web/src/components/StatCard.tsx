@@ -10,7 +10,7 @@ type StatCardProps = {
 
 export function StatCard({ label, value, hint, className }: StatCardProps) {
   return (
-    <Card className={cn("overflow-hidden border-border/40 bg-white/50 backdrop-blur-sm shadow-sm", className)}>
+    <Card className={cn("overflow-hidden border-border/40 bg-card/60 backdrop-blur-sm shadow-sm", className)}>
       <CardContent className="p-5">
         <div className="flex flex-col space-y-1">
           <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">

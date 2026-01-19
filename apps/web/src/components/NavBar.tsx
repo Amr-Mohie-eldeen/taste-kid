@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { LogOut, ShieldCheck, Sparkles } from "lucide-react";
 import { useStore } from "../lib/store";
 import { Button } from "./ui/button";
-import { ensureLoggedIn } from "../lib/oidc";
+import { queryClient } from "../lib/queryClient";
 
 export function NavBar() {
   const { userId, userProfile } = useStore();
@@ -33,22 +33,19 @@ export function NavBar() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  asChild
                   className="h-8 px-2 rounded-full text-muted-foreground hover:text-destructive"
                   title="Sign out"
+                  onClick={() => {
+                    useStore.getState().resetSession();
+                    queryClient.clear();
+                  }}
                 >
-                  <Link to="/#signout">
-                    <LogOut className="h-4 w-4" />
-                  </Link>
+                  <LogOut className="h-4 w-4" />
                 </Button>
               </div>
             ) : (
-              <Button
-                size="sm"
-                onClick={() => ensureLoggedIn({ action: "login" })}
-                className="rounded-full font-bold px-5"
-              >
-                Sign In
+              <Button size="sm" asChild className="rounded-full font-bold px-5">
+                <Link to="/login">Sign In</Link>
               </Button>
             )}
           </div>

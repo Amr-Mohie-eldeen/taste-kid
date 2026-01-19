@@ -10,7 +10,7 @@ class IdentityProviderNotSupportedError(ValueError):
     pass
 
 
-def get_or_create_user_id_for_subject(*, provider: str, subject: str) -> int:
+def get_or_create_user_id_for_subject(*, provider: str, subject: str, display_name: str | None = None) -> int:
     if not provider:
         raise IdentityProviderNotSupportedError("Missing identity provider")
 
@@ -29,7 +29,7 @@ def get_or_create_user_id_for_subject(*, provider: str, subject: str) -> int:
         if row:
             return int(row["user_id"])
 
-        user_id = create_user(display_name=None)
+        user_id = create_user(display_name=display_name)
 
         q_insert = text(
             """

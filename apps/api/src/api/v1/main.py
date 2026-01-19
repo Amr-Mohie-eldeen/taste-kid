@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from typing import Any, Generic, TypeVar
 
@@ -300,10 +301,66 @@ def _keycloak_enabled() -> bool:
 @limiter.limit(register_rate_limit)
 def register(request: Request, payload: AuthRegisterRequest):
     _ = request
+
     if _keycloak_enabled():
-        raise HTTPException(
-            status_code=410,
-            detail="Registration is managed by the identity provider",
+        from api.auth.identity import get_or_create_user_id_for_subject
+        from api.auth.keycloak import (
+            KeycloakError,
+            create_user,
+            get_admin_access_token,
+            password_grant,
+        )
+        from api.config import (
+            KEYCLOAK_ADMIN_PASSWORD,
+            KEYCLOAK_ADMIN_USERNAME,
+            KEYCLOAK_BASE_URL,
+            KEYCLOAK_REALM,
+            KEYCLOAK_WEB_CLIENT_ID,
+        )
+
+        if not KEYCLOAK_ADMIN_USERNAME or not KEYCLOAK_ADMIN_PASSWORD:
+            raise HTTPException(status_code=500, detail="Keycloak admin credentials not configured")
+
+        try:
+            admin_token = get_admin_access_token(
+                base_url=KEYCLOAK_BASE_URL,
+                realm="master",
+                username=KEYCLOAK_ADMIN_USERNAME,
+                password=KEYCLOAK_ADMIN_PASSWORD,
+            )
+            subject = create_user(
+                base_url=KEYCLOAK_BASE_URL,
+                realm=KEYCLOAK_REALM,
+                admin_token=admin_token,
+                email=payload.email,
+                password=payload.password,
+                display_name=payload.display_name,
+            )
+
+            user_id = get_or_create_user_id_for_subject(
+                provider="keycloak",
+                subject=subject,
+                display_name=payload.display_name,
+            )
+
+            tokens = password_grant(
+                base_url=KEYCLOAK_BASE_URL,
+                realm=KEYCLOAK_REALM,
+                client_id=KEYCLOAK_WEB_CLIENT_ID,
+                username=payload.email,
+                password=payload.password,
+                scope="openid profile email",
+            )
+        except KeycloakError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        summary = get_user_summary(user_id)
+        access_token = tokens.get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            raise HTTPException(status_code=500, detail="Keycloak token response missing access_token")
+
+        return _envelope(
+            AuthTokenResponse(access_token=access_token, user=UserSummaryResponse(**summary.__dict__))
         )
 
     try:
@@ -326,8 +383,46 @@ def register(request: Request, payload: AuthRegisterRequest):
 @limiter.limit(login_rate_limit)
 def login(request: Request, payload: AuthLoginRequest):
     _ = request
+
     if _keycloak_enabled():
-        raise HTTPException(status_code=410, detail="Login is managed by the identity provider")
+        from api.auth.identity import get_or_create_user_id_for_subject
+        from api.auth.keycloak import KeycloakError, password_grant
+        from api.config import KEYCLOAK_BASE_URL, KEYCLOAK_REALM, KEYCLOAK_WEB_CLIENT_ID
+
+        try:
+            tokens = password_grant(
+                base_url=KEYCLOAK_BASE_URL,
+                realm=KEYCLOAK_REALM,
+                client_id=KEYCLOAK_WEB_CLIENT_ID,
+                username=payload.email,
+                password=payload.password,
+                scope="openid profile email",
+            )
+        except KeycloakError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+        access_token = tokens.get("access_token")
+        if not isinstance(access_token, str) or not access_token:
+            raise HTTPException(status_code=500, detail="Keycloak token response missing access_token")
+
+        import base64
+
+        try:
+            payload_part = access_token.split(".")[1]
+            payload_part += "=" * (-len(payload_part) % 4)
+            claims = json.loads(base64.urlsafe_b64decode(payload_part.encode("utf-8")).decode("utf-8"))
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail="Failed to decode Keycloak token") from exc
+
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject:
+            raise HTTPException(status_code=500, detail="Keycloak token missing sub")
+
+        user_id = get_or_create_user_id_for_subject(provider="keycloak", subject=subject, display_name=None)
+        summary = get_user_summary(user_id)
+        return _envelope(
+            AuthTokenResponse(access_token=access_token, user=UserSummaryResponse(**summary.__dict__))
+        )
 
     try:
         user_id = authenticate_user(email=payload.email, password=payload.password)

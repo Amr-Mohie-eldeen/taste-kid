@@ -10,16 +10,16 @@ type PageHeaderProps = {
 
 export function PageHeader({ title, subtitle, userId }: PageHeaderProps) {
   return (
-    <header className="relative overflow-hidden rounded-3xl bg-white border border-border/50 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+    <header className="relative overflow-hidden rounded-3xl bg-card/60 backdrop-blur-xl border border-border/50 p-8 shadow-[0_8px_30px_rgb(0,0,0,0.25)]">
       {/* Abstract Background Element */}
       <div className="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
       <div className="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-primary/5 blur-3xl" />
       
-      <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative z-10 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between text-foreground">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-primary">
             <Sparkles className="h-4 w-4" />
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Platform Console</span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.2em]">Curated</span>
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">
             {title}
@@ -30,7 +30,7 @@ export function PageHeader({ title, subtitle, userId }: PageHeaderProps) {
             </p>
           ) : (
             <p className="max-w-2xl text-base font-medium text-muted-foreground/80 leading-relaxed">
-              Personalized movie intelligence platform powered by vector embeddings and style analysis.
+              A clean, personal space for discovering what to watch next.
             </p>
           )}
         </div>

@@ -10,12 +10,8 @@ export type DecodedIdToken = {
 const issuerUri = import.meta.env.VITE_KEYCLOAK_ISSUER_URL;
 const clientId = import.meta.env.VITE_KEYCLOAK_CLIENT_ID;
 
-if (!issuerUri) {
-  throw new Error("Missing VITE_KEYCLOAK_ISSUER_URL");
-}
-
-if (!clientId) {
-  throw new Error("Missing VITE_KEYCLOAK_CLIENT_ID");
+export function isOidcConfigured(): boolean {
+  return Boolean(issuerUri && clientId);
 }
 
 export const oidc = oidcSpa
@@ -27,16 +23,24 @@ export const oidc = oidcSpa
   .createUtils();
 
 export function bootstrapOidc(): void {
+  if (!isOidcConfigured()) {
+    return;
+  }
+
   void oidc.bootstrapOidc({
     implementation: "real",
-    issuerUri,
-    clientId,
+    issuerUri: issuerUri as string,
+    clientId: clientId as string,
     scopes: ["profile", "email"],
     BASE_URL: window.location.origin,
   });
 }
 
 export async function ensureLoggedIn(params?: { action?: "login" | "register" }): Promise<void> {
+  if (!isOidcConfigured()) {
+    return;
+  }
+
   const state = await oidc.getOidc();
   if (state.isUserLoggedIn) {
     return;
@@ -52,6 +56,10 @@ export async function ensureLoggedIn(params?: { action?: "login" | "register" })
 }
 
 export async function getAccessToken(): Promise<string | null> {
+  if (!isOidcConfigured()) {
+    return null;
+  }
+
   const state = await oidc.getOidc();
   if (!state.isUserLoggedIn) {
     return null;
@@ -60,6 +68,10 @@ export async function getAccessToken(): Promise<string | null> {
 }
 
 export async function logout(params?: { redirectTo?: "home" | "current page" }): Promise<void> {
+  if (!isOidcConfigured()) {
+    return;
+  }
+
   const state = await oidc.getOidc();
   if (!state.isUserLoggedIn) {
     return;
